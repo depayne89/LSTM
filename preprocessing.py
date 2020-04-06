@@ -1,23 +1,9 @@
 import numpy as np
 import time
 import h5py
+from torch.utils.data import Dataset, DataLoader
 
-def get_patient(iPt):
-    """ Converts patient index to patient number
-
-    :param iPt: patient index (from 0 to 14)
-    :return:
-    """
-    patient = ['23_002', '23_003', '23_004', '23_005', '23_006', '23_007', '24_001', '24_002', '24_004', '24_005',
-               '25_001', '25_002', '25_003', '25_004', '25_005']
-    return patient[iPt-1]
-
-
-def get_record_start(iPt):
-    record_start = [1276155634, 1280793545, 1289786494, 1289352195, 1304995738, 1307499627, 1279855048, 1290132962,
-                    1306460580, 1307429366, 1278571538, 1278627258, 1280717229, 1290645207, 1304674450]
-
-    return record_start[iPt-1]
+import datasets as ds
 
 
 def get_fs(iPt):
@@ -74,14 +60,14 @@ def get_data(iPt, t_start, t_end):
     #   calendar.timegm(time.strptime('06-May-2011 09:34:10', '%d-%b-20%y %H:%M:%S'))
 
     # location of data
-    file_base = '/media/NVdata/Patient_' + get_patient(iPt)
+    file_base = '/media/NVdata/Patient_' + ds.get_patient(iPt)
 
     # iEEG frequencies, for each patient
     fs = get_fs(iPt)
 
     # Convert times from time since start of recording to time since epoch
-    t_start = t_start + get_record_start(iPt)
-    t_end = t_end + get_record_start(iPt)
+    t_start = t_start + ds.get_record_start(iPt)
+    t_end = t_end + ds.get_record_start(iPt)
 
     # Convert times to UTC date format
     UTC_start = time.gmtime(t_start)
@@ -109,4 +95,28 @@ def get_data(iPt, t_start, t_end):
     return data
 
 
+def calc_drop(data):
+    print()
 
+
+class NVDataset(Dataset):
+
+    def __init__(self, iPt,  transform=None):
+        self.iPt = iPt
+        self.transform = transform
+        self.rawDir = 'Patient_' + ds.get_patient(iPt)
+
+    def test(self):
+        print(self.rawDir)
+
+    # def __len__(self):
+    #     return self.len
+
+    # def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
+    #
+    #
+    #
+    #     return x, y
+
+tester = NVDataset(1)
+tester.test()
