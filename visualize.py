@@ -4,13 +4,14 @@ import datetime
 import time
 import h5py
 
-import preprocessing as pre
+import get_datasets as gd
+import create_datasets as cd
 
 
 
 def raw_eeg(pt, eeg_data, t_start, t_end, sznum='', annots={}):
 
-    rec_start = pre.get_record_start(pt)
+    rec_start = cd.get_record_start(pt)
 
     start = rec_start + t_start
     end = rec_start + t_end
@@ -41,7 +42,7 @@ def raw_eeg(pt, eeg_data, t_start, t_end, sznum='', annots={}):
         to_plot = eeg_data[ch, :] + height + 2 * height * ch
         plt.plot(to_plot, 'k', linewidth=0.5)
 
-    fs = pre.get_fs(pt)
+    fs = cd.get_fs(pt)
     for annot, secs in annots.items():
         sec_in_fig = secs-t_start
         step = round(sec_in_fig*fs)  # FIX TO GET CORRECT FS?
@@ -73,6 +74,16 @@ def raw_sz_eeg(patient, sznum, t_before, t_after, inter=False, inter_jump = 60*6
         t_start = t_start - inter_jump
         t_end = t_end - inter_jump
 
-    raw = pre.get_data(patient, t_start, t_end)
+    raw = gd.get_data(patient, t_start, t_end)
 
     raw_eeg(patient, raw, t_start, t_end, sznum, {'sz':szTime})
+
+pt =  8
+jump = 10
+start_s=0 + jump*1000
+end_s=10 + jump*1000
+
+start = 8640000 + start_s * 600
+end = 8640000+ end_s * 600
+data = cd.get_data(pt, start, end)
+raw_eeg(pt, data, start, end)

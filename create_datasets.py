@@ -4,6 +4,10 @@ from sys import stdout
 from bisect import bisect
 import time
 
+# import visualize as vis
+
+drop_threshold = 0.5
+
 
 def pt_list():
     return np.array([1,6,8,9,10,11,13,15])
@@ -145,6 +149,113 @@ def load_sz_times(patient, percent_train=80):
     return Sz_train, Sz_test, cutoff
 
 
+def get_fs(iPt):
+    fs_array = [399.6098, 399.6083, 399.6158, 399.6106, 399.6099, 399.6029, 399.6028, 399.6047, 399.6100, 399.6028,
+                399.6075, 399.5972, 399.6204, 399.6132, 399.5972]
+    return fs_array[iPt-1]
+
+
+def get_min(file_base, t_file_start, fs, start=0, end=60):
+    """Extracts one .mat file, i.e. up to one minute of data
+
+    :param file_base: Location of data
+    :param t_file_start: s, time since epoch for the start of file, should be a multiple of 60
+    :param fs: Hz, sampling frequency
+    :param start: s, seconds into minute chunk to start pulling data
+    :param end: s, seconds into minute chunk to stop pulling data
+    :return: data_segment: numpy array (16 x timesteps
+    """
+
+    utc = time.gmtime(t_file_start)  # convert to UTC date format
+
+    filename = file_base + time.strftime("/Data_%Y_%m_%d/Hour_%H/UTC_%H_%M_00.mat", utc)  # converts UTC to filename
+    # print('File:', filename)
+    # Loads .mat file into data_segment
+    f = h5py.File(filename)
+    # print('Before')
+    try:
+        for k, v in f.items(): # This assumes there is only one variable (the data matrix) in the .mat file, otherwise use commented line
+            data_segment = np.array(v)  # 16 * timebins numpy array
+            data = data_segment[:, int(start * fs + .5):int(end * fs + .5)]
+    except:
+        print('Error loading file, replacing with NaNs')
+        nan_array = np.empty((16, int(end*fs+.5) - int(start*fs+.5)))
+        nan_array[:] = np.nan
+        data = nan_array
+	# arrays[k] = np.array(v) # if more than one variable in .mat file, what original code used
+    # print('After')
+    #return data from 'start' to 'end' seconds added .5 as int() floors values
+    return data
+    #return np.arange(0,160).reshape(16,10)
+
+
+def get_data(iPt, t_start, t_end):
+    """Collects and concatenates required data segment from saved .mat files
+
+    :param iPt: patient index (1 to 15)
+    :param t_start: s, seconds since start of recording, start of data to be extracted
+    :param t_end: s, seconds since start of recording, end of data to be extracted
+    :return: data: numpy matrix (16 x timesteps)
+    """
+
+
+    if t_end <= t_start:
+        print('Error: end time not after start time')
+        exit()
+
+    # NOTE: start times are generated from date strings assuming times are gm time. While this is wrong, if we always assume gm this should be fine
+    # EXCEPT: day light savings time throws it out as it would occur a tthe wrong time!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    # s, Time of EEG recording start since epoch (1/1/1970)
+
+    # code to extract these values from string:
+    #   calendar.timegm(time.strptime('06-May-2011 09:34:10', '%d-%b-20%y %H:%M:%S'))
+
+    # location of data
+    file_base = '/media/NVdata/Patient_' + get_patient(iPt)
+
+    # iEEG frequencies, for each patient
+    fs = get_fs(iPt)
+
+    # Convert times from time since start of recording to time since epoch
+    t_start = t_start + get_record_start(iPt)
+    t_end = t_end + get_record_start(iPt)
+
+    # Convert times to UTC date format
+    UTC_start = time.gmtime(t_start)
+    UTC_end = time.gmtime(t_end)
+
+    # if start and end time in the same .mat file
+    if time.gmtime(t_start-t_start % 60) == time.gmtime(t_end-t_end % 60):
+
+        data = get_min(file_base, t_start-t_start % 60, fs, UTC_start.tm_sec, UTC_end.tm_sec)   # gets data from the file
+
+    else: # extract from multiple files
+        # extract appropriate segment of the first file
+        data = get_min(file_base, t_start - t_start % 60, fs, UTC_start.tm_sec, 60)
+        t_tmp = t_start - t_start % 60 + 60  # moves to next time block
+
+        # while not at the start of the last file to look at
+        while t_tmp < (t_end - t_end % 60):
+            # extract full file and join to previous data
+            data = np.concatenate((data, get_min(file_base, t_tmp, fs)), axis=1)
+            t_tmp += 60 # advance to next segment
+
+        # extract last segment of file to the appropriate point and join to previous data
+        data = np.concatenate((data, get_min(file_base, t_tmp, fs, 0, UTC_end.tm_sec)), axis=1)
+
+    return data
+
+
+def calc_drop(iPt,time):
+    data = get_data(iPt, time, time+600)
+
+    one_channel = data[0]
+    drop = np.sum(np.isnan(one_channel))/data.shape[1]
+    return drop
+
+
+
 def generate_dataset(patient, percent_train, steps_back=2, train=True):
     ''' Segments train set into 10 minutes samples and lables into ictal or interictal
 
@@ -154,8 +265,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
     :return:
     '''
 
-    stdout.write('\r Generating dataset...')
-    stdout.flush()
+    print('Generating dataset...')
 
     # get end of train period
     f = h5py.File('/media/NVdata/SzTimes/{0:0.0f}_{1:0.0f}_{2:0.0f}.mat'.format( \
@@ -170,36 +280,57 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
         SzTimes = np.asarray(f['test'])
 
     f.close()
-    print(end)
     # create array of timestamps every 10 minutes from start of period to end
     start = start + get_record_start(patient)
     start_round = start + (600-start%600)  # round up to nearest 10min mark
     start_time = start_round - get_record_start(patient)
 
+    #DEbug
+    # start_time += 7060*60*10
+
 
     sample_times= np.array([])
-    print('Startend ', start_time, ' ', end)
 
     while (start_time + 60*10) < end:
         sample_times = np.append(sample_times, start_time)
         start_time += 60*10
 
     labels = np.zeros(sample_times.shape)
-    print(sample_times)
 
-    for time in SzTimes:
+    for sztime in SzTimes:
         # print('\nSz: ', time)
-        first_sample_after_sz = bisect(sample_times, time)
+        first_sample_after_sz = bisect(sample_times, sztime)
         for i in range(0,2):  # Sz and one after labeled with 2
             if first_sample_after_sz < sample_times.shape[0]:
                 # print(' sample ', sample_times[first_sample_after_sz-i])
-                labels[first_sample_after_sz-i] = 2
+                labels[first_sample_after_sz-i] = -2-i  # sz = -3, post = -2
             # ----------- add labels 2 and -1 --------------
         for i in range(2,steps_back+2): #2 preceeding labled with 1
             # print(' sample ', sample_times[first_sample_after_sz - i])
-            labels[first_sample_after_sz - i] = 1
+            labels[first_sample_after_sz - i] = i-1  # immediately before = 1, 10+ min before = 2
 
-    print('Not yet labelled dropout')
+    # Calculate dropouts
+    ts = time.time()
+    high = 0
+    dropout = np.zeros(sample_times.shape)
+    for i,stime in enumerate(sample_times):
+        # print(i, ' ', stime)
+        if (i+1)%100==0:
+
+            t = time.time() - ts
+            p_time = sample_times.shape[0] / i * t
+            to_write = '\r%d steps of %d. %0.1f out of %0.1f %d above threshold' %(i, sample_times.shape[0], t, p_time, high)
+
+            # to_write = '/r' + str(i) + ' steps of ' + str(sample_times.shape) + '. %0.1f out of %0.1f' % (t, p_time) + ' ' + high + 'above threshold'
+            stdout.write(to_write)
+            stdout.flush()
+
+        drop = calc_drop(patient, stime)
+        dropout[i] = drop
+        if drop > drop_threshold:
+            high +=1
+            # print('High', time, ' ', drop)
+            labels[i] = -1
 
     # Save to file
     if train:
@@ -209,6 +340,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
         f.create_dataset('pred_horizon', data = steps_back * 10)
         f.create_dataset('sample_times', data = sample_times)
         f.create_dataset('sample_labels', data = labels)
+        f.create_dataset('sample_dropout', data = dropout)
         f.close()
     else:
         f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'w')
@@ -217,15 +349,21 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
         f.create_dataset('pred_horizon', data=steps_back * 10)
         f.create_dataset('sample_times', data=sample_times)
         f.create_dataset('sample_labels', data=labels)
+        f.create_dataset('sample_dropout', data = dropout)
+
         f.close()
 
-    stdout.write('Complete')
+    stdout.write('\nComplete')
 
     return
 
 
-# for iPt in pt_list():
-#     print(iPt)
-#     generate_dataset(iPt,80)
-#     generate_dataset(iPt,80, train=False)
-#     print()
+generate_dataset(11,80, train=False)
+
+for iPt in [13, 15]:
+    print("\n-------------Generating for ", iPt, '-------------\n')
+    print("-----TRAIN-----")
+    generate_dataset(iPt,80)
+    print("-----TEST-----")
+    generate_dataset(iPt,80, train=False)
+    print()

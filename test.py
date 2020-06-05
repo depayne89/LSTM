@@ -3,31 +3,29 @@ import torch, torchaudio, torchvision
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import h5py
+import time
 
-import preprocessing as pre
-import visualize as vis
-
-
-
-f = h5py.File('/media/NVdata/SzTimes/all_train_1step_50_1.mat', 'r')
-sample_times = np.asarray(f['sample_times'])
-print(sample_times.shape)
-print(sample_times[:3])
-
-
-
-
-# Displaying data
-
-# pt =2
-# start = 100100  # time since recording start, seconds
-# end = 101000
+# import create_datasets as cd
 #
-# sample = pre.get_data(pt, start, end)
-# print(sample.shape)
-# vis.raw_eeg(pt, sample, start, end)
+# for pt in cd.pt_list():
+#     f = h5py.File('/media/NVdata/Dropout/nanTen_patient%d.mat' % pt)
+#     drop = np.asarray(f['dropout_ten']['train'])
+#     print(pt, drop.mean())
 
-# vis.raw_sz_eeg(pt, 1, 20, 40, inter=False, inter_jump = 60*60*2, train=True)
+# pt = 1
+# error_t = 12878366.0  # and 600 after
+# # start = error_t + 0
+# # cd.get_data(pt, start, start + 600)
+#
+# r_start = cd.get_record_start(1)
+#
+# epoch = error_t + r_start
+# date = time.gmtime(epoch) # 6/11/2010 at 9:00:00am
+# print(date)
 
+f = h5py.File('/media/NVdata/Patient_23_002/Data_2010_11_06/Hour_09/UTC_09_10_00.mat')
+data = np.asarray(f['Data'])
+print(data)
+f.close()
 
 
