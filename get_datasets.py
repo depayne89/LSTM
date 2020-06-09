@@ -4,6 +4,8 @@ import h5py
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchaudio
+import matplotlib.pyplot as plt
+import math
 
 import create_datasets as cd
 
@@ -87,6 +89,10 @@ class BalancedData(Dataset):
         self.shuffle_samples(sz_times, inter_times)
 
 
+    def len(self):
+        return self.select_times.size
+
+
     def time_to_nearest(self, labels):
         forwards = np.zeros(labels.size)
         backwards = np.zeros(labels.size)
@@ -118,7 +124,7 @@ class BalancedData(Dataset):
 
         num_sz = int(np.sum(self.labels[self.labels==1]))
         length = self.labels.size
-        print(length)
+        # print(length)
         sz_times = self.times[self.labels==1]
         time_to_sz = self.time_to_nearest(self.labels)
 
@@ -156,11 +162,14 @@ class BalancedData(Dataset):
 
         start = self.select_times[idx]
         end = start + 600
-
-        x = torch.tensor(cd.get_data(self.pt, start, end))
-        print('X size', x.size())
+        x_np = cd.get_data(self.pt, start, end)
+        x_np[np.isnan(x_np)]=0
+        # plt.plot(x_np[0])
+        # plt.show()
+        x = torch.tensor(x_np)
+        # print('X size', x.size())
         if self.transform:
-            print(x.size)
+            # print(x.size)
             x = self.transform(x)
 
         return x, torch.tensor(y)
@@ -174,6 +183,32 @@ class BalancedData(Dataset):
             # 2 hrs from any other interictal
         # Do so until matched to sz number
 
+
+class BalancedData1m(Dataset):
+
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None):
+        self.pt=pt
+        self.train=train
+        self.train_percent=train_percent
+        self.stepback=stepback
+        self.transform=transform
+        self.balancedData = BalancedData(pt, train, train_percent, stepback, transform)
+        self.original_length = self.balancedData.len()
+
+    def len(self):
+        return self.original_length*10
+
+    def __get__(self, i):
+
+        j = math.floor(i/10)
+        k = i%10
+        sample = self.balancedData[j]  # shape(2, 16, 239770) - x/y, channels, values
+
+        y = sample[1] # labels
+
+        x = sample[0][:,23977*k, 239770*(k+1)]
+
+        return x, y
 
 
 
