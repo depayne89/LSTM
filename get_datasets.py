@@ -3,6 +3,8 @@ import time
 import h5py
 from torch.utils.data import Dataset, DataLoader
 
+import create_datasets as cd
+
 # ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
 # ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
 # ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
@@ -15,9 +17,6 @@ from torch.utils.data import Dataset, DataLoader
 distance_from_sz = 2  # hours, minimum time between inter sample and sz
 distance_from_inter = 2 # hours, minimum time between inter samples
 
-
-
-import create_datasets as cd
 
 
 class WholeDataset(Dataset):
@@ -59,7 +58,7 @@ class WholeDataset(Dataset):
         return x, y
 
 
-class BalancedTrainData(Dataset):
+class BalancedData(Dataset):
 
     def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None):
         self.pt=pt
@@ -67,8 +66,10 @@ class BalancedTrainData(Dataset):
         self.stepback = stepback
         self.transform = transform
         self.train = train
-
-        f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+        if train:
+            f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+        else:
+            f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
         self.train_start = f['train_start']
         self.train_end = f['train_end']
         self.horizon = f['pred_horizon']
@@ -81,7 +82,7 @@ class BalancedTrainData(Dataset):
         inter_times = self.select_interictal()
         print('Complete')
         sz_times = self.times[self.labels==1]
-        x, y = self.shuffle_samples(sz_times, inter_times)
+        self.shuffle_samples(sz_times, inter_times)
 
     def time_to_nearest(self, labels):
         forwards = np.zeros(labels.size)
@@ -138,7 +139,7 @@ class BalancedTrainData(Dataset):
         times = np.concatenate((sz_times, inter_times))
         labels = np.concatenate((np.ones(sz_times.shape), np.zeros(inter_times.shape)))
         inds = np.arange(times.shape[0])
-        np.shuffle(inds)
+        np.random.shuffle(inds)
 
         self.select_times = times[inds]
         self.select_labels = labels[inds]
@@ -154,7 +155,7 @@ class BalancedTrainData(Dataset):
         start = self.select_times[idx]
         end = start + 600
 
-        x = cd.get_data(self.iPt, start, end)
+        x = cd.get_data(self.pt, start, end)
 
         return x, y
 
@@ -170,4 +171,4 @@ class BalancedTrainData(Dataset):
 
 # tester = WholeDataset(1)
 # print(tester[0][0].shape)
-test = BalancedTrainData(1)
+# test = BalancedData(1)

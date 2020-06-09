@@ -189,10 +189,10 @@ def get_min(file_base, t_file_start, fs, start=0, end=60):
     #return np.arange(0,160).reshape(16,10)
 
 
-def get_data(iPt, t_start, t_end):
+def get_data(pt, t_start, t_end):
     """Collects and concatenates required data segment from saved .mat files
 
-    :param iPt: patient index (1 to 15)
+    :param pt: patient index (1 to 15)
     :param t_start: s, seconds since start of recording, start of data to be extracted
     :param t_end: s, seconds since start of recording, end of data to be extracted
     :return: data: numpy matrix (16 x timesteps)
@@ -211,14 +211,14 @@ def get_data(iPt, t_start, t_end):
     #   calendar.timegm(time.strptime('06-May-2011 09:34:10', '%d-%b-20%y %H:%M:%S'))
 
     # location of data
-    file_base = '/media/NVdata/Patient_' + get_patient(iPt)
+    file_base = '/media/NVdata/Patient_' + get_patient(pt)
 
     # iEEG frequencies, for each patient
-    fs = get_fs(iPt)
+    fs = get_fs(pt)
 
     # Convert times from time since start of recording to time since epoch
-    t_start = t_start + get_record_start(iPt)
-    t_end = t_end + get_record_start(iPt)
+    t_start = t_start + get_record_start(pt)
+    t_end = t_end + get_record_start(pt)
 
     # Convert times to UTC date format
     UTC_start = time.gmtime(t_start)
