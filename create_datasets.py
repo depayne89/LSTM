@@ -104,7 +104,7 @@ def seizure_train_test_split(patient, percent_train):
 
     rec_length = get_record_length(patient)
 
-    SzTimes_select = select_seizures(SzTimes, SzType, rec_length, lead_time=0)
+    SzTimes_select = select_seizures(SzTimes, SzType, rec_length, lead_time=0) # Lead time zero so burst szs included
     # Select train of seizures
     train_cutoff = np.percentile(SzTimes_select, percent_train)  # Change to 100 to just get all times
 
@@ -198,7 +198,6 @@ def get_data(iPt, t_start, t_end):
     :return: data: numpy matrix (16 x timesteps)
     """
 
-
     if t_end <= t_start:
         print('Error: end time not after start time')
         exit()
@@ -255,7 +254,6 @@ def calc_drop(iPt,time):
     return drop
 
 
-
 def generate_dataset(patient, percent_train, steps_back=2, train=True):
     ''' Segments train set into 10 minutes samples and lables into ictal or interictal
 
@@ -285,11 +283,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
     start_round = start + (600-start%600)  # round up to nearest 10min mark
     start_time = start_round - get_record_start(patient)
 
-    #DEbug
-    # start_time += 7060*60*10
-
-
-    sample_times= np.array([])
+    sample_times = np.array([])
 
     while (start_time + 60*10) < end:
         sample_times = np.append(sample_times, start_time)
@@ -358,12 +352,4 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
     return
 
 
-generate_dataset(11,80, train=False)
 
-for iPt in [13, 15]:
-    print("\n-------------Generating for ", iPt, '-------------\n')
-    print("-----TRAIN-----")
-    generate_dataset(iPt,80)
-    print("-----TEST-----")
-    generate_dataset(iPt,80, train=False)
-    print()
