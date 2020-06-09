@@ -1,7 +1,9 @@
 import numpy as np
 import time
 import h5py
+import torch
 from torch.utils.data import Dataset, DataLoader
+import torchaudio
 
 import create_datasets as cd
 
@@ -55,7 +57,7 @@ class WholeDataset(Dataset):
 
         x = cd.get_data(self.iPt, start, end)
 
-        return x, y
+        return torch.tensor(x), torch.tensor(y)
 
 
 class BalancedData(Dataset):
@@ -83,6 +85,7 @@ class BalancedData(Dataset):
         print('Complete')
         sz_times = self.times[self.labels==1]
         self.shuffle_samples(sz_times, inter_times)
+
 
     def time_to_nearest(self, labels):
         forwards = np.zeros(labels.size)
@@ -145,7 +148,6 @@ class BalancedData(Dataset):
         self.select_labels = labels[inds]
 
 
-
     def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
 
         y = self.select_labels[idx]
@@ -155,9 +157,13 @@ class BalancedData(Dataset):
         start = self.select_times[idx]
         end = start + 600
 
-        x = cd.get_data(self.pt, start, end)
+        x = torch.tensor(cd.get_data(self.pt, start, end))
+        print('X size', x.size())
+        if self.transform:
+            print(x.size)
+            x = self.transform(x)
 
-        return x, y
+        return x, torch.tensor(y)
 
 
         # Randomly select interictal (class=0)
@@ -167,6 +173,9 @@ class BalancedData(Dataset):
             # Min dropout (average / 4)
             # 2 hrs from any other interictal
         # Do so until matched to sz number
+
+
+
 
 
 # tester = WholeDataset(1)
