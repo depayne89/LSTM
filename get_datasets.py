@@ -94,34 +94,7 @@ class BalancedData(Dataset):
     def __len__(self):
         return self.len
 
-    def time_to_nearest(self, labels):
-        forwards = np.zeros(labels.size)
-        backwards = np.zeros(labels.size)
-        out = np.zeros(labels.size)
-        j = 0
-        k = 0
-
-        for i in range(labels.size):
-            if labels[i] == 1:
-                j = 0
-            else:
-                j += 1
-            forwards[i] = j
-
-        for i in range(labels.size):
-            if labels[-i - 1] == 1:
-                k = 0
-            else:
-                k += 1
-            backwards[-i - 1] = k
-
-        for i in range(labels.size):
-            out[i] = np.minimum(forwards[i], backwards[i])
-
-        return out
-
     def select_interictal(self):
-        ts = time.time()
         num_sz = int(np.sum(self.labels[self.labels==1]))
         length = self.labels.size
         sz_times = self.times[self.labels==1]
@@ -137,25 +110,11 @@ class BalancedData(Dataset):
                     time_to_inter = np.abs(inter_times - self.times[k])
                     if time_to_szs.min()/3600 > distance_from_sz and time_to_inter.min()/3600 > distance_from_inter:
                         found=True
-                    else:
-                        print('Too close, try again')
                 else:
                     if time_to_szs.min()/3600 > distance_from_sz:
                         found=True
-                    else:
-                        print('Too close, try again')
 
             inter_times[i] = self.times[k]
-
-            # time_to_inter = self.time_to_nearest(inter_labels)
-            # valid_samples = np.asarray(np.where(np.logical_and(time_to_inter>(distance_from_inter*6), time_to_sz>(distance_from_sz*6))))[0]
-            # rand = np.random.randint(0, valid_samples.size)
-            # rand_i = valid_samples[rand]
-            # inter_times[i] = self.times[rand_i]
-            # inter_labels[rand_i]=1
-
-        print('Selection took %0.1f seconds' % (time.time() - ts))
-        print(inter_times[:10])
 
         return inter_times
 
