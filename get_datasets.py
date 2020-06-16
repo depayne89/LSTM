@@ -146,7 +146,7 @@ class BalancedData(Dataset):
             # print(x.size)
             x = self.transform(x)
 
-        return x, torch.tensor(y, dtype=torch.int64)
+        return x, torch.tensor(y, dtype=torch.float32)
 
 
         # Randomly select interictal (class=0)

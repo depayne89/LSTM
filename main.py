@@ -10,11 +10,12 @@ import matplotlib.pyplot as plt
 import create_datasets as cd
 import models
 import get_datasets as gd
+import validate as val
 
 # -------------- Settings -------------------
 patients = [1,6,8,9,10,11,13,15]  # patient list (1-15)
 patients = [1]
-train = 0                           # binary, whether to train a new model
+train = 1                           # binary, whether to train a new model
 test = 1                            # binary, whether to test the model
 
 
@@ -54,7 +55,7 @@ for pt in patients:
     # Model
     model = models.CNN1min(out1=c1, out2=c2)
     print(model)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     model_path = "/media/projects/daniel_lstm/models/" + model_name + "_%d.pt" % pt
@@ -84,9 +85,12 @@ for pt in patients:
         test_dataset = gd.BalancedData1m(pt=pt, train=False)
         validation_loader = DataLoader(dataset=test_dataset, batch_size=batch_size)
 
-        print('\n')
+        print('Testing')
         y, yhat = models.test(trained_model, validation_loader)
+        # torch.save([y, yhat], )
+        print('Yhat', yhat)
+        sz_yhat, inter_yhat = val.split_yhat(y, yhat)
+        print('\n')
 
-        correct = (yhat==y).sum()
-        accuracy = correct / len(test_dataset)
-        print('Accuracy', accuracy)
+        print('-------RESULTS-------')
+        a, lo, hi = val.auc_hanleyci(sz_yhat, inter_yhat)
