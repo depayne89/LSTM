@@ -72,26 +72,27 @@ class BalancedData(Dataset):
         self.train = train
         if train:
             f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+            self.start = f['train_start']
+            self.end = f['train_end']
         else:
             f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
-        self.train_start = f['train_start']
-        self.train_end = f['train_end']
+            self.start = f['test_start']
+            self.end = f['test_end']
         self.horizon = f['pred_horizon']
         self.times = np.asarray(f['sample_times'])
         self.labels = np.asarray(f['sample_labels'])
         self.dropout = np.asarray(f['sample_dropout'])
         f.close()
 
-        print('Selecting interictal sampels')
+        print('Selecting interictal samples')
         inter_times = self.select_interictal()
         print('Complete')
         sz_times = self.times[self.labels==1]
         self.shuffle_samples(sz_times, inter_times)
+        self.len = sz_times.size + inter_times.size
 
-
-    def len(self):
-        return self.select_times.size
-
+    def __len__(self):
+        return self.len
 
     def time_to_nearest(self, labels):
         forwards = np.zeros(labels.size)
@@ -119,7 +120,6 @@ class BalancedData(Dataset):
 
         return out
 
-
     def select_interictal(self):
 
         num_sz = int(np.sum(self.labels[self.labels==1]))
@@ -142,7 +142,6 @@ class BalancedData(Dataset):
 
         return inter_times
 
-
     def shuffle_samples(self, sz_times, inter_times):
 
         times = np.concatenate((sz_times, inter_times))
@@ -152,7 +151,6 @@ class BalancedData(Dataset):
 
         self.select_times = times[inds]
         self.select_labels = labels[inds]
-
 
     def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
 
@@ -166,13 +164,13 @@ class BalancedData(Dataset):
         x_np[np.isnan(x_np)]=0
         # plt.plot(x_np[0])
         # plt.show()
-        x = torch.tensor(x_np)
+        x = torch.tensor(x_np, dtype=torch.float32)
         # print('X size', x.size())
         if self.transform:
             # print(x.size)
             x = self.transform(x)
 
-        return x, torch.tensor(y)
+        return x, torch.tensor(y, dtype=torch.int64)
 
 
         # Randomly select interictal (class=0)
@@ -193,20 +191,21 @@ class BalancedData1m(Dataset):
         self.stepback=stepback
         self.transform=transform
         self.balancedData = BalancedData(pt, train, train_percent, stepback, transform)
-        self.original_length = self.balancedData.len()
+        self.original_length = self.balancedData.len
+        self.len = self.original_length*10
 
-    def len(self):
-        return self.original_length*10
+    def __len__(self):
+        return self.len
 
-    def __get__(self, i):
+    def __getitem__(self, i):
 
         j = math.floor(i/10)
         k = i%10
         sample = self.balancedData[j]  # shape(2, 16, 239770) - x/y, channels, values
-
+        # print('Sample shape', sample[0].size())
         y = sample[1] # labels
 
-        x = sample[0][:,23977*k, 239770*(k+1)]
+        x = sample[0][:,23977*k:23977*(k+1)]
 
         return x, y
 
