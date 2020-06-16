@@ -121,24 +121,41 @@ class BalancedData(Dataset):
         return out
 
     def select_interictal(self):
-
+        ts = time.time()
         num_sz = int(np.sum(self.labels[self.labels==1]))
         length = self.labels.size
-        # print(length)
         sz_times = self.times[self.labels==1]
-        time_to_sz = self.time_to_nearest(self.labels)
-
         inter_times = np.zeros((sz_times.shape))
-        inter_labels = np.zeros((self.labels.shape))
 
         for i in range(num_sz):
+            found = False
+            # select random index and see if its far enough away
+            while not found:
+                k = np.random.randint(0,length)
+                time_to_szs = np.abs(sz_times - self.times[k])
+                if i>0:
+                    time_to_inter = np.abs(inter_times - self.times[k])
+                    if time_to_szs.min()/3600 > distance_from_sz and time_to_inter.min()/3600 > distance_from_inter:
+                        found=True
+                    else:
+                        print('Too close, try again')
+                else:
+                    if time_to_szs.min()/3600 > distance_from_sz:
+                        found=True
+                    else:
+                        print('Too close, try again')
 
-            time_to_inter = self.time_to_nearest(inter_labels)
-            valid_samples = np.asarray(np.where(np.logical_and(time_to_inter>(distance_from_inter*6), time_to_sz>(distance_from_sz*6))))[0]
-            rand = np.random.randint(0, valid_samples.size)
-            rand_i = valid_samples[rand]
-            inter_times[i] = self.times[rand_i]
-            inter_labels[rand_i]=1
+            inter_times[i] = self.times[k]
+
+            # time_to_inter = self.time_to_nearest(inter_labels)
+            # valid_samples = np.asarray(np.where(np.logical_and(time_to_inter>(distance_from_inter*6), time_to_sz>(distance_from_sz*6))))[0]
+            # rand = np.random.randint(0, valid_samples.size)
+            # rand_i = valid_samples[rand]
+            # inter_times[i] = self.times[rand_i]
+            # inter_labels[rand_i]=1
+
+        print('Selection took %0.1f seconds' % (time.time() - ts))
+        print(inter_times[:10])
 
         return inter_times
 
@@ -208,10 +225,3 @@ class BalancedData1m(Dataset):
         x = sample[0][:,23977*k:23977*(k+1)]
 
         return x, y
-
-
-
-
-# tester = WholeDataset(1)
-# print(tester[0][0].shape)
-# test = BalancedData(1)
