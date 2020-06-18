@@ -11,6 +11,7 @@ import create_datasets as cd
 import models
 import get_datasets as gd
 import metrics as met
+import traintest as tt
 
 # -------------- Options -------------------
 patients = [1,6,8,9,10,11,13,15]  # patient list (1-15)
@@ -47,7 +48,7 @@ patient: added to the end on save
 def train_model(untrained_model, dataset):
     batches_per_epoch = dataset.len / batch_size
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
-    out_model = models.train(model=untrained_model, train_loader=train_loader, criterion=criterion, optimizer=optimizer,
+    out_model = tt.train(model=untrained_model, train_loader=train_loader, criterion=criterion, optimizer=optimizer,
                                  n_epochs=1, batches_per_epoch=batches_per_epoch)
     torch.save(out_model, model_path)
 
@@ -83,7 +84,7 @@ def load_or_calculate_forecasts(pt, t_model, dataset):
     else:
         validation_loader = DataLoader(dataset=dataset, batch_size=batch_size)
         print('Testing')
-        y, yhat = models.test(t_model, validation_loader)
+        y, yhat = tt.test(t_model, validation_loader)
         print('\n')
 
         if not os.path.isdir(dir_path):
