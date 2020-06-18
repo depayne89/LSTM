@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, kendalltau, rankdata, sem
 import math
+import sys
 
 def accuracy(y,yhat):
     correct = (yhat == y).sum()
@@ -10,10 +11,10 @@ def accuracy(y,yhat):
 
 
 def split_yhat(y, yhat):
-    print('yhat min', yhat.min())
+    # print('yhat min', yhat.min())
     sz_yhat = yhat[y==1]
     inter_yhat = yhat[y==0]
-    print('Split yhat', sz_yhat, inter_yhat)
+    # print('Split yhat', sz_yhat, inter_yhat)
     return sz_yhat, inter_yhat
 
 
@@ -28,7 +29,7 @@ def auc(sz, inter, plot=False):
 
     # Initialise graph and fpr, tpr arrays.
     minimum = min(sz.min(), inter.min())  # smallest forecast (to get minimum of x-axis)
-    print('Min', minimum)
+    # print('Min', minimum)
     min_exp = int(np.log10(minimum))-1  # smallest forecast in log scale
     steps_per_decade = 20  # resolution of the AUC calculation. Here decade refers to order of magnitude
     vals = -min_exp*steps_per_decade+1
@@ -105,6 +106,79 @@ def auc_hanleyci(sz, inter, alpha=.05, bonferroni=1, plot=False):
 
     ci = [ci_low, ci_hi]  # Confidence interval
 
-    print('AUC: %0.3f, [%0.3f, %0.3f]' % (a, ci_low, ci_hi))
-
     return a, ci_low, ci_hi
+
+
+def shuffley(y):
+    len = y.size
+    out = y[np.random.randint(0, len, len)]
+    return out
+
+
+def auc_on_shuffled(n, sz, inter, alpha=.05, bonferroni=1):
+    sz_len = sz.size
+    combo = np.concatenate((sz, inter))
+    aucs = np.zeros(n)
+    for i in range(n):
+        np.random.shuffle(combo)
+        sz_shuffled = combo[:sz_len]
+        inter_shuffled = combo[sz_len:]
+        a, _, _ = auc(sz_shuffled, inter_shuffled)
+        aucs[i] = a
+
+    auc_mean = aucs.mean()
+
+    se = aucs.std() / math.sqrt(n)
+
+    return auc_mean, se
+
+
+def brier_score(sz_forecasts, inter_forecasts, p_sz):
+
+    n_samples = sz_forecasts.size + inter_forecasts.size
+
+    p_sz = float(sz_forecasts.size) / float(sz_forecasts.size + inter_forecasts.size)
+
+    # print 'p_sz'
+    # print p_sz
+    # print np.mean(sz_forecasts)
+    # print np.mean(inter_forecasts)
+
+
+    sum = 0
+    for sample in sz_forecasts:
+        sum += (sample - 1.)**2
+    for sample in inter_forecasts:
+        sum += (sample - 0.)**2
+
+    return sum / n_samples
+
+
+def brier_skill_score(sz_forecasts, inter_forecasts, p_sz):
+
+    bs = brier_score(sz_forecasts, inter_forecasts, p_sz)
+
+    # All forecasts the same
+    # sz_forecasts_r = np.ones(sz_forecasts.shape)*p_sz
+    # inter_forecasts_r = np.ones(inter_forecasts.shape)*p_sz
+
+    # Forecasts shuffled
+    forecasts = np.concatenate((sz_forecasts, inter_forecasts))
+
+    bss_array = np.empty(1000)
+    for i in range(1000):
+        np.random.shuffle(forecasts)
+        sz_forecasts_r = forecasts[:sz_forecasts.size]
+        inter_forecasts_r = forecasts[sz_forecasts.size:]
+
+        # print sz_forecasts[:10]
+        # print sz_forecasts_r[:10]
+
+        bs_ref = brier_score(sz_forecasts_r, inter_forecasts_r, p_sz)
+
+        bss_array[i] = 1 - bs/bs_ref
+
+    bss = np.mean(bss_array)
+    bss_se = sem(bss_array)
+
+    return bs, bs_ref, bss, bss_se

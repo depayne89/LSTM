@@ -7,10 +7,12 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import os
 
-import validate as val
 
-sz = np.array([.9, .6, .8, .6, .9, .7, .8, .7, 6])
-inter = np.array([.5, .6, .4, .7, .5, .6, .4, .8, .3])
+a = 0.0012345
 
-val.auc_hanleyci(sz, inter)
+print('num: %.1g' % a)
+print('num: %.2f' % a)
+print('num: %.3g' % a)
+print('num: %.4f' % a)

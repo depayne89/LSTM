@@ -10,14 +10,17 @@ import matplotlib.pyplot as plt
 import create_datasets as cd
 import models
 import get_datasets as gd
-import validate as val
+import metrics as met
 
-# -------------- Settings -------------------
+# -------------- Options -------------------
 patients = [1,6,8,9,10,11,13,15]  # patient list (1-15)
 patients = [1]
-train = 1                           # binary, whether to train a new model
+train = 0                           # binary, whether to train a new model
 test = 1                            # binary, whether to test the model
+use_existing_results = 1            # determines whether existing results should be gathered
 
+show_auc = 1
+show_bss = 1
 
 # ----------- Hyperparameters ---------------
 
@@ -41,13 +44,54 @@ patient: added to the end on save
 """
 
 
-def train_model(pt, batch_size, model):
-    train_dataset = gd.BalancedData1m(pt=pt)
-    batches_per_epoch = train_dataset.len / batch_size
-    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size)
-    model = models.train(model=model, train_loader=train_loader, criterion=criterion, optimizer=optimizer,
+def train_model(untrained_model, dataset):
+    batches_per_epoch = dataset.len / batch_size
+    train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
+    out_model = models.train(model=untrained_model, train_loader=train_loader, criterion=criterion, optimizer=optimizer,
                                  n_epochs=1, batches_per_epoch=batches_per_epoch)
-    torch.save(model, model_path)
+    torch.save(out_model, model_path)
+
+
+def load_model(path):
+    if os.path.isfile(path):
+        out_model = torch.load(path)
+        print('Model loaded')
+
+    else:
+        answer = input('Model not found, train the model?').upper()
+        print(answer)
+        if answer in ['Y', 'YES', ' Y', ' YES']:
+            print('Training')
+            train_model(batch_size, model)
+            out_model = torch.load(path)
+        else:
+            print('Not training')
+            sys.exit(0)
+    return out_model
+
+
+def load_or_calculate_forecasts(pt, t_model, dataset):
+    dir_path = '/media/projects/daniel_lstm/results_log/' + model_name
+    file_path = dir_path + '/%d.pt' % pt
+
+    if use_existing_results:
+        if os.path.isfile(file_path):
+            y, yhat = torch.load(file_path)
+        else:
+            print('File not found for ', model_name)
+            sys.exit(0)
+    else:
+        validation_loader = DataLoader(dataset=dataset, batch_size=batch_size)
+        print('Testing')
+        y, yhat = models.test(t_model, validation_loader)
+        print('\n')
+
+        if not os.path.isdir(dir_path):
+            os.mkdir(dir_path)
+        torch.save([y, yhat], file_path)
+
+    return y, yhat
+
 
 for pt in patients:
     print('\n---------------- Patient %d ------------------' % pt)
@@ -60,37 +104,26 @@ for pt in patients:
 
     model_path = "/media/projects/daniel_lstm/models/" + model_name + "_%d.pt" % pt
 
-    # Train
+    # Train model
     if train:
-        train_model(pt, batch_size, model)
+        train_model(batch_size, model, gd.BalancedData1m(pt=pt))
 
     # Load model
-    if os.path.isfile(model_path):
-        trained_model = torch.load(model_path)
-        print('Model loaded')
-
-    else:
-        answer = input('Model not found, train the model?').upper()
-        print(answer)
-        if answer in ['Y', 'YES', ' Y', ' YES']:
-            print('Training')
-            train_model(pt, batch_size, model)
-            trained_model = torch.load(model_path)
-        else:
-            print('Not training')
-            sys.exit(0)
+    trained_model = load_model(model_path)
 
     if test:
+        y, yhat = load_or_calculate_forecasts(pt, trained_model, gd.BalancedData1m(pt=pt, train=False))
 
-        test_dataset = gd.BalancedData1m(pt=pt, train=False)
-        validation_loader = DataLoader(dataset=test_dataset, batch_size=batch_size)
+        sz_yhat, inter_yhat = met.split_yhat(y, yhat)
 
-        print('Testing')
-        y, yhat = models.test(trained_model, validation_loader)
-        # torch.save([y, yhat], )
-        print('Yhat', yhat)
-        sz_yhat, inter_yhat = val.split_yhat(y, yhat)
-        print('\n')
 
         print('-------RESULTS-------')
-        a, lo, hi = val.auc_hanleyci(sz_yhat, inter_yhat)
+        if show_auc:
+            a, lo, hi = met.auc_hanleyci(sz_yhat, inter_yhat)
+            print('AUC: %0.3f (%0.3f:%0.3f)' % (a, lo, hi))
+            # a_s, a_e= met.auc_on_shuffled(1000, sz_yhat, inter_yhat)
+            # print('Shuffled auc %0.3f (%0.4f)' % (a_s, a_e))
+
+        if show_bss:
+            bs, bs_ref, bss, bss_se = met.brier_skill_score(sz_yhat, inter_yhat, p_sz=0.5)
+            print('Brier: %.3g, Bss: %0.3g (%.3g) Ref: %.3g' % (bs, bss, bss_se, bs_ref))
