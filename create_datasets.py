@@ -3,6 +3,10 @@ import numpy as np
 from sys import stdout
 from bisect import bisect
 import time
+from scipy import signal
+import torchaudio
+import torch
+import matplotlib.pyplot as plt
 
 # import visualize as vis
 
@@ -352,4 +356,29 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
     return
 
 
+def filter_data(data):
+    sos = signal.butter(4, (48, 52), 'bandstop', fs=400, output='sos')
+    filtered = np.zeros(data.shape)
+    for i, channel in enumerate(data):
+        filtered[i] = signal.sosfilt(sos, channel)
+    return filtered
 
+# for pt in [1,6,8,9,10,11,13,15]:
+#     generate_dataset(pt, 80, steps_back=0, train=True)
+#     generate_dataset(pt, 80, steps_back=0, train=False)
+
+
+def spectrogram(data):
+    spec_transform = torchaudio.transforms.Spectrogram()
+    out = torch.tensor(np.zeros((16, 120, 120)))
+    print('Out tensor', out.numpy().shape)
+    for i in range(16):
+        y = data[i]
+        spec = spec_transform(y)
+        print('spec shape', spec.numpy().shape)
+        spec = np.log10(spec)
+        out[i] = spec[:120]
+    # plt.imshow(out[0].numpy())
+    # plt.show()
+
+    return out

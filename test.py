@@ -6,13 +6,20 @@ import h5py
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rc
 import sys
 import os
+import visualize as vis
+import get_datasets as gd
+import scipy
+from scipy import signal
+import create_datasets as cd
+
+x = np.array([1,2,3])
+m=1
+for i in range(m-1):
+    x = np.concatenate((x, np.array([1,2,3])))
+print(x)
 
 
-a = 0.0012345
 
-print('num: %.1g' % a)
-print('num: %.2f' % a)
-print('num: %.3g' % a)
-print('num: %.4f' % a)

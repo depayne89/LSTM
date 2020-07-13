@@ -9,17 +9,14 @@ import math
 
 import create_datasets as cd
 
-# ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
-# ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
-# ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
-# ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
-# ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
-# ------------------------------  NORMALIZE!!!!!!!!!!!!!!!!!!!!!!!!!!!1 -----------------------------
 
 # ------------- Dataset Parameters -------------------
 
 distance_from_sz = 2  # hours, minimum time between inter sample and sz
 distance_from_inter = 2 # hours, minimum time between inter samples
+
+
+# bandstop_at50
 
 
 
@@ -64,7 +61,7 @@ class WholeDataset(Dataset):
 
 class BalancedData(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None):
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False):
         self.pt=pt
         self.train_percent = train_percent
         self.stepback = stepback
@@ -84,35 +81,42 @@ class BalancedData(Dataset):
         self.dropout = np.asarray(f['sample_dropout'])
         f.close()
 
-        print('Selecting interictal samples')
-        inter_times = self.select_interictal()
-        print('Complete')
-        sz_times = self.times[self.labels==1]
+        # print('Selecting interictal samples')
+        inter_times = self.select_interictal(multiple=multiple)
+        # print('Complete')
+        sz_times_base = self.times[self.labels==1]
+        sz_times = sz_times_base
+        if duplicate_ictal:
+            for i in range(multiple - 1):
+                sz_times = np.concatenate((sz_times, sz_times_base))
+
         self.shuffle_samples(sz_times, inter_times)
+        # self.zipper_samples(sz_times, inter_times)
         self.len = sz_times.size + inter_times.size
 
     def __len__(self):
         return self.len
 
-    def select_interictal(self):
-        num_sz = int(np.sum(self.labels[self.labels==1]))
+    def select_interictal(self, multiple=1):
+        num_sz = int(np.sum(self.labels[self.labels==1])) * multiple
         length = self.labels.size
         sz_times = self.times[self.labels==1]
-        inter_times = np.zeros((sz_times.shape))
+        inter_times = np.zeros(num_sz)
 
         for i in range(num_sz):
             found = False
             # select random index and see if its far enough away
             while not found:
                 k = np.random.randint(0,length)
-                time_to_szs = np.abs(sz_times - self.times[k])
-                if i>0:
-                    time_to_inter = np.abs(inter_times - self.times[k])
-                    if time_to_szs.min()/3600 > distance_from_sz and time_to_inter.min()/3600 > distance_from_inter:
-                        found=True
-                else:
-                    if time_to_szs.min()/3600 > distance_from_sz:
-                        found=True
+                if self.labels[k]==0:
+                    time_to_szs = np.abs(sz_times - self.times[k])
+                    if i>0:
+                        time_to_inter = np.abs(inter_times - self.times[k])
+                        if time_to_szs.min()/3600 > distance_from_sz and time_to_inter.min()/3600 > distance_from_inter:
+                            found=True
+                    else:
+                        if time_to_szs.min()/3600 > distance_from_sz:
+                            found=True
 
             inter_times[i] = self.times[k]
 
@@ -127,6 +131,18 @@ class BalancedData(Dataset):
 
         self.select_times = times[inds]
         self.select_labels = labels[inds]
+
+    def zipper_samples(self, sz_times, inter_times):
+
+        x = np.zeros(sz_times.size * 2)
+        y = np.zeros(sz_times.size * 2)
+
+        for i in range(sz_times.size):
+            x[2 * i] = sz_times[i]
+            y[2 * i] = 1
+            x[2 * i + 1] = inter_times[i]
+        self.select_times = x
+        self.select_labels = y
 
     def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
 
@@ -160,13 +176,13 @@ class BalancedData(Dataset):
 
 class BalancedData1m(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None):
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False):
         self.pt=pt
         self.train=train
         self.train_percent=train_percent
         self.stepback=stepback
         self.transform=transform
-        self.balancedData = BalancedData(pt, train, train_percent, stepback, transform)
+        self.balancedData = BalancedData(pt, train, train_percent, stepback, transform, multiple, duplicate_ictal)
         self.original_length = self.balancedData.len
         self.len = self.original_length*10
 
@@ -181,6 +197,52 @@ class BalancedData1m(Dataset):
         # print('Sample shape', sample[0].size())
         y = sample[1] # labels
 
-        x = sample[0][:,23977*k:23977*(k+1)]
+        one_min_lengths = [23977, 0, 0, 0, 0, 23967, 0, 23967, 23977, 23967, 23967, 0, 23977, 0, 23967]
+
+        x = sample[0][:, 23960*k:23960*(k+1)]
+        x_f = torch.tensor(cd.filter_data(x), dtype=torch.float32)
+
+        # print('x', x[0, :10], x.type())
+        # print('xf', x_f[0, :10], x_f.type())
 
         return x, y
+#
+# class BalancedData1mMultiply(Dataset):
+#
+#     def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=2):
+#         self.pt=pt
+#         self.train=train
+#         self.train_percent=train_percent
+#         self.stepback=stepback
+#         self.transform=transform
+#         self.multiple=2
+#
+#         data = np.empty(multiple)
+#         for i in range(multiple):
+#             data[i] = BalancedData(pt, train, train_percent, stepback, transform)
+#
+#         self.balancedData = BalancedData(pt, train, train_percent, stepback, transform)
+#
+#         self.original_length = self.balancedData.len
+#         self.len = self.original_length*10
+#
+#     def __len__(self):
+#         return self.len
+#
+#     def __getitem__(self, i):
+#
+#         j = math.floor(i/10)
+#         k = i%10
+#         sample = self.balancedData[j]  # shape(2, 16, 239770) - x/y, channels, values
+#         # print('Sample shape', sample[0].size())
+#         y = sample[1] # labels
+#
+#         one_min_lengths = [23977, 0, 0, 0, 0, 23967, 0, 23967, 23977, 23967, 23967, 0, 23977, 0, 23967]
+#
+#         x = sample[0][:, 23960*k:23960*(k+1)]
+#         x_f = torch.tensor(cd.filter_data(x), dtype=torch.float32)
+#
+#         # print('x', x[0, :10], x.type())
+#         # print('xf', x_f[0, :10], x_f.type())
+#
+#         return x, y

@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rc
+import scipy.stats as stats
+
 import datetime
 import time
 import h5py
@@ -7,6 +10,7 @@ import h5py
 import get_datasets as gd
 import create_datasets as cd
 
+rc('text', usetex=False)
 
 def raw_eeg(pt, eeg_data, t_start, t_end, sznum='', annots={}):
 
@@ -133,16 +137,75 @@ def sz_types(pt):
     plt.show()
 
 
-# # pt =  8
-# # jump = 10
-# # start_s=0 + jump*1000
-# # end_s=10 + jump*1000
-# #
-# # start = 8640000 + start_s * 600
-# # end = 8640000+ end_s * 600
-# # data = cd.get_data(pt, start, end)
-# # raw_eeg(pt, data, start, end)
+def loss_and_auc(loss, auc, vloss, vauc, model_name):
+    fig, ax = plt.subplots(figsize=(8, 3))
+    # ax.set_title('A', fontsize=9, loc='left', position = (-.25,1.05))
+    ax.set_axis_off()
 
-for p in [1,6,8,9,10,11,13,15]:
-    print(p)
-    sz_types(p)
+    # auc
+    auc_ax = fig.add_axes([.08, .15, .4, .8])
+    auc_ax.set_ylabel('AUC')
+    auc_ax.plot(auc, 'bo')
+    auc_ax.plot(vauc, 'ro')
+    print('AUC', auc)
+    print('vAUC', vauc)
+
+
+    loss_ax = fig.add_axes([.58, .15, .4, .8])
+    loss_ax.set_ylabel('Loss')
+    loss_ax.plot(loss, 'b')
+    loss_ax.plot(vloss, 'r')
+
+    plt.savefig('/home/daniel/Desktop/LSTM_figs/losslogs/' + model_name)
+
+
+def plot_sample(pt, data, label, prediction, sample_num):
+
+    figpath = '/home/daniel/Desktop/LSTM_figs/eegs/%d/%d.png' % (pt, sample_num)
+
+    if sample_num%10==0:
+        print('%d samples proessed' % sample_num)
+
+    fig, ax = plt.subplots()
+
+    height = 200
+    for ch in range(16):
+        # print(ch)
+        to_plot = data[ch, :] + height + 2 * height * ch
+        ax.plot(to_plot, 'k', linewidth=0.5)
+
+    label_text= 'Inter'
+    if label==1:
+        label_text = 'Seizure'
+    correct = round(1 - abs(label - prediction))
+    color='red'
+    if correct:
+        color = 'green'
+    ax.text(.3, 1.02, label_text, transform=ax.transAxes, fontsize=18)
+    ax.text(.55, 1.02, str(prediction), transform=ax.transAxes, color=color, fontsize=18)
+    # plt.savefig(figpath)
+    plt.show()
+
+
+
+    test_title = 'Pt 5'
+
+    dummy_data = np.array([1, 2, 3, 4])
+
+    ax.plot(dummy_data)
+
+
+def correlation(x, y, xlabel, ylabel):
+
+    a, b, r, p, ste = stats.linregress(x, y)
+
+    line_x = np.linspace(0,x.max(), 10)
+    line_y = line_x * a + b
+
+    fig, ax = plt.subplots()
+    ax.plot(line_x, line_y, 'k')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.plot(x,y, 'bo')
+    ax.set_title('R: %.2f, p:%.2g' %(r, p))
+    plt.show()

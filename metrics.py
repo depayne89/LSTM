@@ -27,6 +27,11 @@ def auc(sz, inter, plot=False):
     :return: auc, area under the curve
     '''
 
+    if sz.size==0 or inter.size==0:
+        return 0., 0, 0
+
+    sz[sz<10**(-40)] = 10**(-40)
+    inter[inter < 10 ** (-40)] = 10 ** (-40)
     # Initialise graph and fpr, tpr arrays.
     minimum = min(sz.min(), inter.min())  # smallest forecast (to get minimum of x-axis)
     # print('Min', minimum)
