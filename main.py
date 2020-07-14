@@ -12,6 +12,7 @@ import models
 import get_datasets as gd
 import metrics as met
 import traintest as tt
+import model_functions as mf
 
 # -------------- Options -------------------
 patients = [6, 8,10,11]  # patient list (1-15)
@@ -33,12 +34,12 @@ show_bss = 1
 
 version = 1
 
-data_mult = 4  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
+data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
 duplicate_ictal = False
 
 n_epochs = 1
 batch_size = 160  # for 1mBalanced: 20 samples / sz
-learning_rate = .0001
+learning_rate = .001
 c1=16  #15
 c2=32  #64
 # c3 =128
@@ -119,7 +120,8 @@ for pt in patients:
     model = models.CNN1min(out1=c1, out2=c2, out3=fc1)
     # print(model)
     # print(list(model.parameters()))
-    criterion = torch.nn.BCELoss()
+    # criterion = torch.nn.BCELoss()
+    criterion = mf.weightedBCE([2./(data_mult+1.), 2.*data_mult/(data_mult+1)])
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     model_path = "/media/projects/daniel_lstm/models/" + model_name + "_%d.pt" % pt
