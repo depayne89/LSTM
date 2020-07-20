@@ -34,6 +34,7 @@ def auc(sz, inter, plot=False):
     inter[inter < 10 ** (-40)] = 10 ** (-40)
     # Initialise graph and fpr, tpr arrays.
     minimum = min(sz.min(), inter.min())  # smallest forecast (to get minimum of x-axis)
+    # print('Max', max(sz.max(), inter.max()))
     # print('Min', minimum)
     min_exp = int(np.log10(minimum))-1  # smallest forecast in log scale
     steps_per_decade = 20  # resolution of the AUC calculation. Here decade refers to order of magnitude

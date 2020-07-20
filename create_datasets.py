@@ -370,15 +370,30 @@ def filter_data(data):
 
 def spectrogram(data):
     spec_transform = torchaudio.transforms.Spectrogram()
-    out = torch.tensor(np.zeros((16, 120, 120)))
-    print('Out tensor', out.numpy().shape)
+    out = torch.tensor(np.zeros((16, 120, 120)), dtype=torch.float32)
+    # print('Out tensor', out.numpy().shape)
     for i in range(16):
         y = data[i]
         spec = spec_transform(y)
-        print('spec shape', spec.numpy().shape)
-        spec = np.log10(spec)
+        # print('spec shape', spec.numpy().shape)
+        # spec = np.log10(spec)
         out[i] = spec[:120]
     # plt.imshow(out[0].numpy())
     # plt.show()
 
     return out
+
+def flattened_spectrogram(data):
+    spec_transform = torchaudio.transforms.Spectrogram()
+    out = torch.tensor(np.zeros((16, 120, 120)), dtype=torch.float32)
+    # print('Out tensor', out.numpy().shape)
+    for i in range(16):
+        y = data[i]
+        spec = spec_transform(y)
+        # print('spec shape', spec.numpy().shape)
+        # spec = np.log10(spec)
+        out[i] = spec[:120]
+    # plt.imshow(out[0].numpy())
+    # plt.show()
+
+    return out.view(-1,120)

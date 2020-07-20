@@ -15,10 +15,11 @@ import scipy
 from scipy import signal
 import create_datasets as cd
 
-x = np.array([1,2,3])
-m=1
-for i in range(m-1):
-    x = np.concatenate((x, np.array([1,2,3])))
+x = torch.empty((5,2))
+for i in range(5):
+    for j in range(2):
+        x[i,j] = i*10+j
+
 print(x)
 
 

@@ -15,15 +15,20 @@ import traintest as tt
 import model_functions as mf
 
 # -------------- Options -------------------
-patients = [6, 8,10,11]  # patient list (1-15)
+patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
 # patients = [6, 9, 10, 11]  # patient list (1-15)
 
 # patients = [6]  # patient list (1-15)
 
+model_type = '1min'
+model_type = 'short'
+# model_type = 'medium'
+# model_type = 'long'
+
 train = 1                           # binary, whether to train a new model
 test = 1                            # binary, whether to test the model
 use_existing_results = 0            # determines whether existing results should be gathered
-test_iterations = 1                 # odd, How many test sets to take median from
+test_iterations = 3                 # odd, How many test sets to take median from
 
 show_auc = 1
 show_bss = 1
@@ -32,22 +37,34 @@ show_bss = 1
 
 # ----------- Hyperparameters ---------------
 
-version = 1
+version = 2
+min_version= 10 # Latest: flatspec:11, spec:10, timeseries:10
 
 data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
 duplicate_ictal = False
+use_spec = True
+transform = None
+flatten_spec = False
 
-n_epochs = 1
-batch_size = 160  # for 1mBalanced: 20 samples / sz
+n_epochs = 5
+min_batch_size = 160  # for 1mBalanced: 20 samples / sz
+batch_size = 16
 learning_rate = .001
-c1=16  #15
-c2=32  #64
-# c3 =128
-fc1=16  #128
-# fc2 = 32
+
+# 1 min
+
+min_c1=16  #15
+min_c2=32  #64
+min_c3 =64
+min_fc1=32  #128
+min_fc2 = 16
+
+# short
 
 
-def train_model(untrained_model, dataset, test_dataset):
+
+
+def train_model(untrained_model, dataset, test_dataset, model_name, model_path):
     batches_per_epoch = np.ceil(dataset.len / batch_size)
 
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
@@ -57,26 +74,7 @@ def train_model(untrained_model, dataset, test_dataset):
     print('Model saved as: ', model_path)
     torch.save(out_model, model_path)
 
-
-def load_model(path):
-    if os.path.isfile(path):
-        out_model = torch.load(path)
-        print('Model loaded from: ', path)
-
-    else:
-        answer = input('Model not found, train the model?').upper()
-        print(answer)
-        if answer in ['Y', 'YES', ' Y', ' YES']:
-            print('Training')
-            train_model(batch_size, model)
-            out_model = torch.load(path)
-        else:
-            print('Not training')
-            sys.exit(0)
-    return out_model
-
-
-def load_or_calculate_forecasts(pt, t_model, dataset):
+def load_or_calculate_forecasts(pt, t_model, dataset, model_name):
     dir_path = '/media/projects/daniel_lstm/results_log/' + model_name
     file_path = dir_path + '/%d.pt' % pt
 
@@ -98,6 +96,20 @@ def load_or_calculate_forecasts(pt, t_model, dataset):
 
     return y, yhat
 
+trans_text = ''
+if use_spec:
+    if flatten_spec:
+        transform = cd.flattened_spectrogram
+        trans_text = '_fspec'
+    else:
+        transform=cd.spectrogram
+        trans_text = '_spec'
+
+aucs = np.zeros(15)
+los = np.zeros(15)
+his = np.zeros(15)
+bsss = np.zeros(15)
+bsses = np.zeros(15)
 
 for pt in patients:
     print('\n---------------- Patient %d ------------------' % pt)
@@ -105,35 +117,65 @@ for pt in patients:
     if pt==11 or pt==13:
         learning_rate = .001
 
-    model_name = '1m_v%d_c%dp4c%dp4d%dd_%d_adam' % (version, c1, c2, fc1, batch_size) + str(learning_rate)[2:]
-    print(model_name)
-    # Name guide in order
-    """
-    Timescale: 1m/short/medium/long
-    version: iteration of this timescale
-    architechture: c% - convlayer with % filters, p4 - maxpool from 4 values, d - dense/fc layer
-    optimizer: name (eg adam) followed by learning rate (with 0. removed, eg 0.001 -> 001
-    patient: added to the end on save
-    """
 
-    # Model
-    model = models.CNN1min(out1=c1, out2=c2, out3=fc1)
-    # print(model)
-    # print(list(model.parameters()))
-    # criterion = torch.nn.BCELoss()
+    # ---------- Model Name/Path ----------
+    # ----- HERE HERE HERE -----
+    min_model_name = '1m_v%d_c%dp4c%dp4d%dd_%d_adam' % (min_version, min_c1, min_c2, min_fc1, min_batch_size) + str(learning_rate)[2:] + trans_text
+    short_model_name = 'short_v%d_' % (version) # changing the naming convention as it will get too messy, just updating version every time
+
+
+    min_model_path = "/media/projects/daniel_lstm/models/" + min_model_name + "_%d.pt" % pt
+    short_model_path = "/media/projects/daniel_lstm/models/" + short_model_name + "_%d.pt" % pt
+
+    # ---------- Build Model ----------
+
+    if model_type=='1min':
+        if use_spec:
+            if flatten_spec:
+                model = models.CNN1min_fspec(out1=min_c1, out2=min_c2, out3=min_c3, out4=min_fc1, out5=min_fc2)
+            else:
+                model = models.CNN1min_spec(out1=min_c1, out2=min_c2, out3=min_c3, out4=min_fc1, out5=min_fc2)
+        else:
+            model = models.CNN1min(out1=min_c1, out2=min_c2, out3=min_fc1)
+    elif model_type=='short':
+        model = models.Short(min_model_path=min_model_path, out1=16, transform=transform)
+    else:
+        print('Model Type not found')
+        sys.exit(0)
+
     criterion = mf.weightedBCE([2./(data_mult+1.), 2.*data_mult/(data_mult+1)])
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    model_path = "/media/projects/daniel_lstm/models/" + model_name + "_%d.pt" % pt
 
-    # Train model
+
+    # ---------- Train Model ----------
+
     if train:
+        # if model_type==
         # model.to(device)
-        train_model(model, gd.BalancedData1m(pt=pt, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal),
-                    gd.BalancedData1m(pt=pt, train=False, stepback=2))
+        # ----- HERE HERE HERE -----
+        if model_type=='1min':
+            train_model(model, gd.BalancedSpreadData1m(pt=pt, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal, transform=transform),
+                        gd.BalancedSpreadData1m(pt=pt, train=False, stepback=2, transform=transform), min_model_name, min_model_path)
+        elif model_type=='short':
+            train_model(model, gd.BalancedData(pt=pt, stepback=2, transform=transform),
+                        gd.BalancedData(pt=pt, stepback=2, transform=transform, train=False), short_model_name, short_model_path)
+            print('')
+        else:
+            print('Model type not found')
+            sys.exit(0)
 
     # Load model
-    trained_model = load_model(model_path)
+    if model_type=='1min':
+        trained_model = models.load_model(min_model_path)
+    elif model_type=='short':
+        trained_model = models.load_model(short_model_path)
+    else:
+        print('Model type not found')
+        sys.exit(0)
+
+
+    # ---------- Test Model ----------
 
     if test:
         auc_a = np.zeros(test_iterations)
@@ -144,7 +186,17 @@ for pt in patients:
         bss_se_a = np.zeros(test_iterations)
 
         for j in range(test_iterations):
-            y, yhat = load_or_calculate_forecasts(pt, trained_model, gd.BalancedData1m(pt=pt, train=False))
+            # ----- HERE HERE HERE -----
+            if model_type=='1min':
+                test_data = gd.BalancedSpreadData1m(pt=pt, train=False, transform=transform)
+                model_name = min_model_name
+            elif model_type=='short':
+                test_data = gd.BalancedData(pt=pt, train=False, transform=transform)
+                model_name = short_model_name
+            else:
+                print('Model not found during valedation', model_type)
+                sys.exit(0)
+            y, yhat = load_or_calculate_forecasts(pt, trained_model, test_data, model_name)
 
             sz_yhat, inter_yhat = met.split_yhat(y, yhat)
 
@@ -167,9 +219,20 @@ for pt in patients:
         print('-------RESULTS-------')
         if show_auc:
             ind = np.where(auc_a == np.median(auc_a))[0][0]
-            print(auc_a)
+            # print(auc_a)
+            aucs[pt - 1] = auc_a[ind]
+            los[pt - 1] = lo_a[ind]
+            his[pt - 1] = hi_a[ind]
+
             print('AUC: %0.3f (%0.3f:%0.3f)' % (auc_a[ind], lo_a[ind], hi_a[ind]))
         if show_bss:
             ind = np.where(bss_a==np.median(bss_a))[0][0]
-            print(bss_a)
+            bsss[pt-1] = bss_a[ind]
+            bsses[pt-1] = bss_se_a[ind]
+            # print(bss_a)
             print('Brier: %.3g, Bss: %0.3g (%.3g)' % (bs_a[ind], bss_a[ind], bss_se_a[ind]))
+
+print('\n\n ------------  FINAL RESULTS --------------')
+for pt in patients:
+    print('Patient %d, AUC: %.3f (%.3f, %.3f), BSS: %.3g (%.3g)' %
+          (pt, aucs[pt-1], los[pt-1], his[pt-1], bsss[pt-1], bsses[pt-1]))
