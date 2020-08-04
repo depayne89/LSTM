@@ -188,3 +188,39 @@ def brier_skill_score(sz_forecasts, inter_forecasts, p_sz):
     bss_se = sem(bss_array)
 
     return bs, bs_ref, bss, bss_se
+
+
+def sens_tiw(y, y_hat, extrapolate = True):
+
+    print(y_hat)
+
+    sz_forecasts = y_hat[y==1]
+    in_forecasts = y_hat[y==0]
+
+    lower = -10
+    upper = 0
+    thresholds = np.logspace(lower, upper, 999)
+    max_product = 0
+    best_threshold = 0
+    for threshold in thresholds:
+        sz_in_high = np.sum(sz_forecasts>threshold)
+        time_in_low = np.sum(y_hat<threshold)
+        product = sz_in_high * time_in_low
+        if product>max_product:
+            max_product=product
+            best_threshold=threshold
+
+    print('Threshold', best_threshold)
+
+    if extrapolate:
+        tiw = float(np.sum(in_forecasts>best_threshold)) / in_forecasts.size
+    else:
+        tiw = float(np.sum(y_hat>best_threshold)) /y_hat.size
+
+    sens = float(np.sum(sz_forecasts>best_threshold)) / sz_forecasts.size
+
+    min_sz = sz_forecasts.min()
+    zero_chance = float(np.sum(in_forecasts<min_sz))/in_forecasts.size
+
+    return sens*100, tiw*100, zero_chance*100
+    # determine high threshold

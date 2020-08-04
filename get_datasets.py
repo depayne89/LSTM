@@ -61,12 +61,13 @@ class WholeDataset(Dataset):
 
 class BalancedData(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False):
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1):
         self.pt=pt
         self.train_percent = train_percent
         self.stepback = stepback
         self.transform = transform
         self.train = train
+        self.lookBack = lookBack
         if train:
             f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
             self.start = f['train_start']
@@ -152,6 +153,9 @@ class BalancedData(Dataset):
 
         start = self.select_times[idx]
         end = start + 600
+        start -= 600*(self.lookBack-1)  # Go back 10s of minutes for more training info
+
+
         x_np = cd.get_data(self.pt, start, end)
         x_np[np.isnan(x_np)]=0
         # plt.plot(x_np[0])
@@ -305,3 +309,16 @@ class BalancedSpreadData1m(Dataset):
         # print('X size', x.size())
 
         return x, torch.tensor(y, dtype=torch.float32)
+
+
+class BalancedDataMedium(Dataset):
+
+    """If sample time is 1pm (sample start) get
+        1:09pm
+        12:09pm
+        11:09am
+        .
+        .
+        .
+        2:09pm (previous day)
+    """

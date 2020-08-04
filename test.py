@@ -14,13 +14,14 @@ import get_datasets as gd
 import scipy
 from scipy import signal
 import create_datasets as cd
+import metrics as m
 
-x = torch.empty((5,2))
-for i in range(5):
-    for j in range(2):
-        x[i,j] = i*10+j
+y = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+              1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+yhat = np.array([.0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+                 .1, .15, .2, .25, .3, .35, .4, .45, .5, .55])
 
-print(x)
+print(m.sens_tiw(y, yhat, extrapolate=True))
 
 
 

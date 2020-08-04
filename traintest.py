@@ -25,10 +25,9 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
     auc_plot = np.empty(int(batches_per_epoch * n_epochs))
     vloss_plot = np.zeros(int(batches_per_epoch * n_epochs))
     vauc_plot = np.zeros(int(batches_per_epoch * n_epochs))
-
+    t0 = time.time()
     for epoch in range(n_epochs):
 
-        t0 = time.time()
         cost = 0
         batch = 0
 

@@ -195,7 +195,7 @@ class CNN1min(torch.nn.Module):
 
     def forward(self, x):
         # print('In Forward x require grad? ', x.requires_grad)
-        print('X shape', x.detach().numpy().shape)
+        # print('X shape', x.detach().numpy().shape)
         x = self.cnn1(x)
         x = torch.relu(x)
         x = self.maxpool1(x)
@@ -232,15 +232,22 @@ class CNN1min(torch.nn.Module):
 
 class Short(torch.nn.Module):
 
-    def __init__(self, min_model_path, out1=16, transform=None):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, lookBack = 1):
         super(Short, self).__init__()
 
         self.min_model_path = min_model_path
         self.min_model = load_model(min_model_path)
+        self.rn1=rn1
         self.out1=out1
         self.transform=transform
+        self.lookBack=lookBack
 
-        self.fc1 = torch.nn.Linear(10, out1)  # 1496 - kernal 5 and pool 4
+        # self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True) # first number is input size = 1? sequence length is 10
+        # (batch_size, sequence_length, number_features)
+        self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True)
+
+
+        self.fc1 = torch.nn.Linear(rn1, out1)  # 1496 - kernal 5 and pool 4
         self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
         # self.fc2 = torch.nn.Linear(out3, out4)
         # self.bn4 = torch.nn.BatchNorm1d(num_features=out4)
@@ -250,28 +257,60 @@ class Short(torch.nn.Module):
 
         # self.rnn1 =
 
+        # rnn = nn.LSTM(10, 20, 2) # input size, hidden_size, layers
+        # input = torch.randn(5, 3, 10)  seq_len, batch, input_size
+        # h0 = torch.randn(2, 3, 20) num_layers * num_directions, batch, hidden_size
+        # c0 = torch.randn(2, 3, 20)
+        # output, (hn, cn) = rnn(input, (h0, c0))
+
+
     def forward(self, x):
-        print('X shape in Short start ', x.detach().numpy().shape)
-        samples = x.detach().numpy().shape[0]
+        # print('X shape in Short start ', x.detach().numpy().shape)
+
+        batch_size = x.detach().numpy().shape[0]
+        sequence_length = 10*self.lookBack
+        num_features = 1
+        input_channels = 16
+        sample_trim = 239600*self.lookBack
+
+        self.h0 = torch.randn(1, batch_size, self.rn1)
+        self.c0 = torch.randn(1, batch_size, self.rn1)
 
         with torch.no_grad():
-            x = x[:, :, :239600]
-            x = x.view((samples, 16, 10, 23960))
-            x = x.transpose(1,2)
-            x = x.reshape((samples*10,16,23960))
+            print('x at start', x.detach().numpy().shape)
+            x = x[:, :, :sample_trim] # trim to reliable number
+            print('x after trim', x.detach().numpy().shape)
+
+            x = x.view((batch_size, input_channels, sequence_length, int(sample_trim/sequence_length)))
+            x = x.transpose(1,2) # (batch_size, seq_length, channels, t)
+            x = x.reshape((batch_size*sequence_length, input_channels, int(sample_trim/sequence_length)))
+
             if self.transform:
                 # print(x.size)
-                x_ = torch.empty((samples*10,16, 120, 120), dtype=torch.float)
+                x_ = torch.empty((batch_size*sequence_length,input_channels, 120, 120), dtype=torch.float)
 
-                for sample in range(samples*10):
+                for sample in range(batch_size*sequence_length):
                     x_[sample] = self.transform(x[sample])
                 x=x_
-            x = self.min_model(x)
-            x = x.view(samples, 10)
+            x = self.min_model(x) # (batch_size*seq_length, 1)
+            x = x.view(batch_size, sequence_length)  # (Batch_size, seq_length)
+
+        x = x.view((batch_size, sequence_length, num_features))  # (batch_size, seq_length, num_features)
+        x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))  # (batch_size, seq_length, hidden_size)
+        x = x.reshape((batch_size*sequence_length, self.rn1))# (batch_size * seq_length, hidden_size)
+
+        # x = x.view((batch_size*sequence_length, self.rn1))  # (batch_size * seq_length, hidden_size)
+
         x = self.fc1(x)
         x = self.bn1(x)
+
         x = self.fc2(x)
-        out = self.sigmoid(x)
+
+        out = self.sigmoid(x)  # (batch_size * seq_length, hidden_size)
+        out = out.reshape((batch_size, sequence_length, 1))# (batch_size * seq_length, hidden_size)
+
+        out = out[:, -1, :]
+
 
 
         return out

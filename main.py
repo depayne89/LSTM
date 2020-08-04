@@ -16,6 +16,8 @@ import model_functions as mf
 
 # -------------- Options -------------------
 patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
+# patients = [6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
+
 # patients = [6, 9, 10, 11]  # patient list (1-15)
 
 # patients = [6]  # patient list (1-15)
@@ -25,19 +27,20 @@ model_type = 'short'
 # model_type = 'medium'
 # model_type = 'long'
 
-train = 1                           # binary, whether to train a new model
+train = 0                              # binary, whether to train a new model
 test = 1                            # binary, whether to test the model
 use_existing_results = 0            # determines whether existing results should be gathered
 test_iterations = 3                 # odd, How many test sets to take median from
 
 show_auc = 1
 show_bss = 1
+show_tiw = 1
 
 # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # ----------- Hyperparameters ---------------
 
-version = 2
+version = 8
 min_version= 10 # Latest: flatspec:11, spec:10, timeseries:10
 
 data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
@@ -45,8 +48,9 @@ duplicate_ictal = False
 use_spec = True
 transform = None
 flatten_spec = False
+look_back = 6  # how many samples prior to labeled sample to start training from (eg 6
 
-n_epochs = 5
+n_epochs = 3
 min_batch_size = 160  # for 1mBalanced: 20 samples / sz
 batch_size = 16
 learning_rate = .001
@@ -110,6 +114,9 @@ los = np.zeros(15)
 his = np.zeros(15)
 bsss = np.zeros(15)
 bsses = np.zeros(15)
+sens = np.zeros(15)
+tiws = np.zeros(15)
+zero_chances = np.zeros(15)
 
 for pt in patients:
     print('\n---------------- Patient %d ------------------' % pt)
@@ -138,7 +145,7 @@ for pt in patients:
         else:
             model = models.CNN1min(out1=min_c1, out2=min_c2, out3=min_fc1)
     elif model_type=='short':
-        model = models.Short(min_model_path=min_model_path, out1=16, transform=transform)
+        model = models.Short(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, lookBack=look_back)
     else:
         print('Model Type not found')
         sys.exit(0)
@@ -158,8 +165,8 @@ for pt in patients:
             train_model(model, gd.BalancedSpreadData1m(pt=pt, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal, transform=transform),
                         gd.BalancedSpreadData1m(pt=pt, train=False, stepback=2, transform=transform), min_model_name, min_model_path)
         elif model_type=='short':
-            train_model(model, gd.BalancedData(pt=pt, stepback=2, transform=transform),
-                        gd.BalancedData(pt=pt, stepback=2, transform=transform, train=False), short_model_name, short_model_path)
+            train_model(model, gd.BalancedData(pt=pt, stepback=2, transform=transform, lookBack=look_back),
+                        gd.BalancedData(pt=pt, stepback=2, transform=transform, train=False, lookBack=look_back), short_model_name, short_model_path)
             print('')
         else:
             print('Model type not found')
@@ -184,6 +191,9 @@ for pt in patients:
         bs_a = np.zeros(test_iterations)
         bss_a = np.zeros(test_iterations)
         bss_se_a = np.zeros(test_iterations)
+        sen_a = np.zeros(test_iterations)
+        tiw_a = np.zeros(test_iterations)
+        zero_chance_a = np.zeros(test_iterations)
 
         for j in range(test_iterations):
             # ----- HERE HERE HERE -----
@@ -191,7 +201,7 @@ for pt in patients:
                 test_data = gd.BalancedSpreadData1m(pt=pt, train=False, transform=transform)
                 model_name = min_model_name
             elif model_type=='short':
-                test_data = gd.BalancedData(pt=pt, train=False, transform=transform)
+                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, lookBack=look_back)
                 model_name = short_model_name
             else:
                 print('Model not found during valedation', model_type)
@@ -215,6 +225,11 @@ for pt in patients:
                 bs_a[j] = bs
                 bss_a[j] = bss
                 bss_se_a[j] = bss_se
+            if show_tiw:
+                sen, tiw, zero_chance = met.sens_tiw(y, yhat, extrapolate=True)
+                sen_a[j] = sen
+                tiw_a[j] = tiw
+                zero_chance_a[j] = zero_chance
 
         print('-------RESULTS-------')
         if show_auc:
@@ -231,8 +246,15 @@ for pt in patients:
             bsses[pt-1] = bss_se_a[ind]
             # print(bss_a)
             print('Brier: %.3g, Bss: %0.3g (%.3g)' % (bs_a[ind], bss_a[ind], bss_se_a[ind]))
+        if show_tiw:
+            ind = np.where(auc_a == np.median(auc_a))[0][0]
+            sens[pt-1] = sen_a[ind]
+            tiws[pt-1] = tiw_a[ind]
+            zero_chances[pt-1] = zero_chance_a[ind]
+            print('Sens: %0.3f, TiW: %0.3f, zeroCh: %0.3f)' % (sen_a[ind], tiw_a[ind], zero_chance_a[ind]))
+
 
 print('\n\n ------------  FINAL RESULTS --------------')
 for pt in patients:
-    print('Patient %d, AUC: %.3f (%.3f, %.3f), BSS: %.3g (%.3g)' %
-          (pt, aucs[pt-1], los[pt-1], his[pt-1], bsss[pt-1], bsses[pt-1]))
+    print('Patient %d, AUC: %.3f (%.3f, %.3f), BSS: %.3g (%.3g), Sens: %.3f, TiW: %.3f, 0risk: %.3f' %
+          (pt, aucs[pt-1], los[pt-1], his[pt-1], bsss[pt-1], bsses[pt-1], sens[pt-1], tiws[pt-1], zero_chances[pt-1]))
