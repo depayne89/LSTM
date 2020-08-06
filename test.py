@@ -16,12 +16,10 @@ from scipy import signal
 import create_datasets as cd
 import metrics as m
 
-y = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-              1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-yhat = np.array([.0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-                 .1, .15, .2, .25, .3, .35, .4, .45, .5, .55])
+loader = DataLoader(dataset=gd.BalancedDataCombo(1, train=True), batch_size=1)
 
-print(m.sens_tiw(y, yhat, extrapolate=True))
+for x, y in loader:
+    print('x shape ', x)
 
 
 

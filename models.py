@@ -93,6 +93,7 @@ class CNN1min_fspec(torch.nn.Module):
 
         return out
 
+
 class CNN1min_spec(torch.nn.Module):
     def __init__(self, out1=16, out2=32, out3=64, out4 = 32, out5 =16):
         super(CNN1min_spec, self).__init__()
@@ -162,6 +163,7 @@ class CNN1min_spec(torch.nn.Module):
 
         return out
 
+
 class CNN1min(torch.nn.Module):
     def __init__(self, out1=32, out2=16, out3=16, out4 = 16):
         super(CNN1min, self).__init__()
@@ -230,6 +232,7 @@ class CNN1min(torch.nn.Module):
 
         return out
 
+
 class Short(torch.nn.Module):
 
     def __init__(self, min_model_path, rn1=16, out1=16, transform=None, lookBack = 1):
@@ -244,7 +247,7 @@ class Short(torch.nn.Module):
 
         # self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True) # first number is input size = 1? sequence length is 10
         # (batch_size, sequence_length, number_features)
-        self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True)
+        self.rnn1 = torch.nn.LSTM(1, rn1, 1, batch_first=True)
 
 
         self.fc1 = torch.nn.Linear(rn1, out1)  # 1496 - kernal 5 and pool 4
@@ -291,17 +294,19 @@ class Short(torch.nn.Module):
 
                 for sample in range(batch_size*sequence_length):
                     x_[sample] = self.transform(x[sample])
-                x=x_
+                x = x_
             x = self.min_model(x) # (batch_size*seq_length, 1)
             x = x.view(batch_size, sequence_length)  # (Batch_size, seq_length)
 
         x = x.view((batch_size, sequence_length, num_features))  # (batch_size, seq_length, num_features)
         x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))  # (batch_size, seq_length, hidden_size)
+        # x=torch.relu(x)
         x = x.reshape((batch_size*sequence_length, self.rn1))# (batch_size * seq_length, hidden_size)
 
         # x = x.view((batch_size*sequence_length, self.rn1))  # (batch_size * seq_length, hidden_size)
 
         x = self.fc1(x)
+        # x = torch.relu(x)
         x = self.bn1(x)
 
         x = self.fc2(x)
@@ -311,6 +316,179 @@ class Short(torch.nn.Module):
 
         out = out[:, -1, :]
 
+        return out
 
+
+class Medium(torch.nn.Module):
+
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, hrsBack=24):
+        super(Medium, self).__init__()
+
+        self.min_model_path = min_model_path
+        self.min_model = load_model(min_model_path)
+        self.rn1=rn1
+        self.out1=out1
+        self.transform=transform
+        self.hrsBack=hrsBack
+
+        self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True)
+
+        self.fc1 = torch.nn.Linear(rn1, out1)
+        self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
+
+        self.fc2 = torch.nn.Linear(out1, 1)
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def forward(self, x):
+        batch_size = x.detach().numpy().shape[0]
+        sequence_length = self.hrsBack + 1
+        num_features=1
+        input_channels=16
+        sample_trim = 23960
+
+        self.h0 = torch.randn(1, batch_size, self.rn1)
+        self.c0 = torch.randn(1, batch_size, self.rn1)
+
+        with torch.no_grad():
+
+            # input shape: (batch_size, sequence_length, input_channels, sample_trim)
+            x = x.reshape((batch_size*sequence_length, input_channels, sample_trim))
+
+            if self.transform:
+                x_ = torch.empty((batch_size*sequence_length, input_channels, 120, 120), dtype=torch.float)
+
+                for sample in range(batch_size*sequence_length):
+                    x_[sample] = self.transform(x[sample])
+                x = x_
+
+            x = self.min_model(x)
+            x = x.view(batch_size, sequence_length)
+
+        x = x.view((batch_size, sequence_length, num_features))
+
+        x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))
+        # x = torch.relu(x) # may remove
+        x = x.reshape((batch_size*sequence_length, self.rn1))
+
+        x = self.fc1(x)
+        x = torch.relu(x)
+        x = self.bn1(x)
+
+        x =self.fc2(x)
+
+        out = self.sigmoid(x)
+        out = out.reshape((batch_size, sequence_length, 1))
+
+        out = out[:, -1, :]
 
         return out
+
+
+class Long(torch.nn.Module):
+
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, daysBack=30):
+        super(Long, self).__init__()
+
+        self.min_model_path = min_model_path
+        self.min_model = load_model(min_model_path)
+        self.rn1 = rn1
+        self.out1 = out1
+        self.transform = transform
+        self.days_back = daysBack
+
+        self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True)
+
+        self.fc1 = torch.nn.Linear(rn1, out1)
+        self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
+
+        self.fc2 = torch.nn.Linear(out1, 1)
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def forward(self, x):
+
+        batch_size = x.detach().numpy().shape[0]
+        sequence_length = self.days_back + 1
+        num_features = 1
+        input_channels = 16
+        sample_trim = 23960
+
+        self.h0 = torch.randn(1, batch_size, self.rn1)
+        self.c0 = torch.randn(1, batch_size, self.rn1)
+
+        with torch.no_grad():
+
+            x = x.reshape((batch_size*sequence_length, input_channels, sample_trim))
+
+            if self.transform:
+                x_ = torch.empty((batch_size*sequence_length, input_channels, 120, 120), dtype=torch.float)
+
+                for sample in range(batch_size*sequence_length):
+                    x_[sample] = self.transform(x[sample])
+                x = x_
+
+            x = self.min_model(x)
+            x = x.view((batch_size, sequence_length))
+
+        x = x.view((batch_size, sequence_length, num_features))
+
+        x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))
+
+        x = x.reshape((batch_size*sequence_length, self.rn1))
+
+        x = self.fc1(x)
+        x = torch.relu(x)
+        x = self.bn1(x)
+
+        x = self.fc2(x)
+        out = self.sigmoid(x)
+        out = out.reshape((batch_size, sequence_length, 1))
+
+        out = out[:, -1, :]
+
+        return out
+
+
+class Combo(torch.nn.Module):
+
+    def __init__(self, min_model_path, short_model_path, med_model_path, long_model_path,
+                 out1=16, transform=None):
+        super(Combo, self).__init__()
+
+        self.min_model_path = min_model_path
+
+        self.short_model = load_model(short_model_path)
+        self.med_model = load_model(med_model_path)
+        self.long_model = load_model(long_model_path)
+
+        self.out1 = out1
+
+        self.fc1 = torch.nn.Linear(3, out1)
+        self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
+        self.fc2 = torch.nn.Linear(out1, 1)
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def forward(self, x):
+
+        # batch_size = x['short'].shape[0]
+        # print('GOT TO FORWARD')
+        with torch.no_grad():
+
+
+            x_short = self.short_model(x['short'])
+            x_med = self.med_model(x['medium'])
+            x_long = self.long_model(x['long'])
+
+
+
+            x =torch.cat((x_short, x_med, x_long), 1)
+
+        print('x shape before combo', x.detach().numpy().shape)
+        x = self.fc1(x)
+        x = torch.relu(x)
+        x = self.bn1(x)
+
+        x = self.fc2(x)
+        out = self.sigmoid(x)
+        return out
+
+

@@ -133,6 +133,7 @@ def test(pt, trained_model, validation_loader):
             for i, sample in enumerate(x_np):
                 batch_power[i] = abs(x_np[i]).mean()
             power = np.concatenate((power, batch_power))
+
     if compare_power: vis.correlation(power, predictions, 'power', 'prediction')
 
 

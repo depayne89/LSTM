@@ -192,7 +192,7 @@ def brier_skill_score(sz_forecasts, inter_forecasts, p_sz):
 
 def sens_tiw(y, y_hat, extrapolate = True):
 
-    print(y_hat)
+    # print(y_hat)
 
     sz_forecasts = y_hat[y==1]
     in_forecasts = y_hat[y==0]
@@ -210,7 +210,7 @@ def sens_tiw(y, y_hat, extrapolate = True):
             max_product=product
             best_threshold=threshold
 
-    print('Threshold', best_threshold)
+    # print('Threshold', best_threshold)
 
     if extrapolate:
         tiw = float(np.sum(in_forecasts>best_threshold)) / in_forecasts.size
