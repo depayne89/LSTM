@@ -161,6 +161,7 @@ class BalancedData(Dataset):
         end = start + 600
 
         if self.medium:
+            # start -= 60*60 # REMOVE
             start += 60*9  # take last minute of the 10 min sample
             hrs_back = 24  # this means 25 samples as we go as far as exactly 24 hrs ago
 
@@ -175,6 +176,7 @@ class BalancedData(Dataset):
                 
 
         elif self.long:
+            # start -= 60*60*24
             start += 60 * 9
             days_back = 30  # days to look back
 
@@ -188,6 +190,7 @@ class BalancedData(Dataset):
                 x_np[i] = minute[:, :23960]
 
         else:
+            # start -= 60
             start -= 600 * (self.lookBack - 1)  # Go back 10s of minutes for more training info
             x_np = cd.get_data(self.pt, start, end)
 

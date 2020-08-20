@@ -5,6 +5,7 @@ import torchaudio
 from torch.utils.data import Dataset, DataLoader
 import time
 import sys, os
+import types
 
 import matplotlib.pyplot as plt
 
@@ -17,19 +18,19 @@ import model_functions as mf
 
 # -------------- Options -------------------
 patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
-# patients = [11, 13, 15]  # patient list (1-15)
+# patients = [8, 9, 10, 11, 13, 15]  # patient list (1-15)
 
-# patients = [10, 11]  # patient list (1-15)
+# patients = [1,6]  # patient list (1-15)
 
 # patients = [6]  # patient list (1-15)
 
 model_type = '1min'
 model_type = 'short'
 model_type = 'medium'
-# model_type = 'long'
-model_type = 'combo'
+model_type = 'long'
+# model_type = 'combo'
 
-train = 1   # binary, whether to train a new model
+train = 0   # binary, whether to train a new model
 test = 1    # binary, whether to test the model
 use_existing_results = 0  # determines whether existing results should be gathered
 test_iterations = 3  # odd, How many test sets to take median from
@@ -43,10 +44,10 @@ show_tiw = 1
 # ----------- Hyperparameters ---------------
 
 combo_version = 1
-long_version = 1
-medium_version = 2
-short_version = 8  # Latest = 9
-min_version = 10  # Latest: flatspec:11, spec:10, timeseries:10
+long_version = 3 # Basic (accidentaly overwritten), last_layer_off = 1
+medium_version = 5  # Basic = 2, last_layer_off = 3
+short_version = 12# Baisc = 8, last_layer off = 10
+min_version = 10  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
 
 data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
 duplicate_ictal = False
@@ -57,7 +58,7 @@ short_look_back = 6  # how many samples prior to labeled sample to start trainin
 hrs_back = 24
 days_back = 30
 
-n_epochs = 3
+n_epochs = 5
 min_batch_size = 160  # for 1mBalanced: 20 samples / sz
 batch_size = 16
 learning_rate = .001
@@ -73,15 +74,14 @@ min_fc2 = 16
 
 # short
 
-
 def train_model(untrained_model, dataset, test_dataset, model_name, model_path):
     batches_per_epoch = np.ceil(dataset.len / batch_size)
 
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=test_dataset.len)
+    test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size)
     out_model = tt.train(model=untrained_model, train_loader=train_loader, test_loader=test_loader, criterion=criterion,
-                         optimizer=optimizer,
-                         n_epochs=n_epochs, batches_per_epoch=batches_per_epoch, model_name=model_name + '_%d' % pt)
+                         optimizer=optimizer, n_epochs=n_epochs, batches_per_epoch=batches_per_epoch, batch_size=batch_size,
+                         model_name=model_name + '_%d' % pt)
     print('Model saved as: ', model_path)
     torch.save(out_model, model_path)
 
@@ -134,7 +134,6 @@ for pt in patients:
         learning_rate = .001
 
     # ---------- Model Name/Path ----------
-    # ----- HERE HERE HERE -----
     min_model_name = '1m_v%d_c%dp4c%dp4d%dd_%d_adam' % (min_version, min_c1, min_c2, min_fc1, min_batch_size) + str(
         learning_rate)[2:] + trans_text
     short_model_name = 'short_v%d_' % (short_version)  # changing the naming convention as it will get too messy, just updating version every time
@@ -217,15 +216,20 @@ for pt in patients:
             print('Model type not found')
             sys.exit(0)
 
+
+
     # Load model
     if model_type == '1min':
         trained_model = models.load_model(min_model_path)
     elif model_type == 'short':
         trained_model = models.load_model(short_model_path)
+        # trained_model.forward = types.MethodType(tt.replacement_forward_short, trained_model)
     elif model_type == 'medium':
         trained_model = models.load_model(medium_model_path)
+        # trained_model.forward = types.MethodType(tt.replacement_forward_medium, trained_model)
     elif model_type == 'long':
         trained_model = models.load_model(long_model_path)
+        # trained_model.forward = types.MethodType(tt.replacement_forward_long, trained_model)
     elif model_type == 'combo':
         trained_model = models.load_model(combo_model_path)
     else:

@@ -137,24 +137,39 @@ def sz_types(pt):
     plt.show()
 
 
-def loss_and_auc(loss, auc, vloss, vauc, model_name):
+def loss_and_auc(loss, auc, vloss, vauc, model_name, batches_per_epoch, epochs):
     fig, ax = plt.subplots(figsize=(8, 3))
     # ax.set_title('A', fontsize=9, loc='left', position = (-.25,1.05))
     ax.set_axis_off()
 
+    val_ind = (np.arange(epochs) + 1) * batches_per_epoch - 1
+
     # auc
     auc_ax = fig.add_axes([.08, .15, .4, .8])
     auc_ax.set_ylabel('AUC')
-    auc_ax.plot(auc, 'bo')
-    auc_ax.plot(vauc, 'ro')
-    print('AUC', auc)
-    print('vAUC', vauc)
+    auc_ax.plot(auc, 'o', color='gray', markersize=4)
+    auc_ax.plot(val_ind, vauc[val_ind.astype(int)], 'ro', markersize=5)
+    auc_ax.set_ylim(bottom=0)
+    auc_ax.legend(['Train', 'Test'], bbox_to_anchor=(.98,.25))
+    auc_ax.set_xticks(val_ind)
+    labels = np.array([])
+    for i in np.arange(epochs):
+        labels = np.append(labels, str(i+1))
+    print(labels)
+    auc_ax.set_xticklabels(labels)
+    auc_ax.set_xlabel('Epochs')
 
 
     loss_ax = fig.add_axes([.58, .15, .4, .8])
     loss_ax.set_ylabel('Loss')
-    loss_ax.plot(loss, 'b')
-    loss_ax.plot(vloss, 'r')
+    loss_ax.plot(loss, color='gray')
+    loss_ax.plot(val_ind, vloss[val_ind.astype(int)], 'ro', markersize=5)
+    loss_ax.set_ylim(bottom=0)
+    loss_ax.set_xticks(val_ind)
+    loss_ax.set_xticklabels(labels)
+    loss_ax.set_xlabel('Epochs')
+
+
 
     plt.savefig('/home/daniel/Desktop/LSTM_figs/losslogs/' + model_name)
 

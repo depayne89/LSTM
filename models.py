@@ -23,6 +23,14 @@ def load_model(path):
         sys.exit(0)
     return out_model
 
+class Identity(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x
+
+
 class CNN1min_fspec(torch.nn.Module):
     def __init__(self, out1=16, out2=32, out3=64, out4 = 32, out5 =16):
         super(CNN1min_fspec, self).__init__()
@@ -239,17 +247,30 @@ class Short(torch.nn.Module):
         super(Short, self).__init__()
 
         self.min_model_path = min_model_path
-        self.min_model = load_model(min_model_path)
+        min_model = load_model(min_model_path)
         self.rn1=rn1
         self.out1=out1
         self.transform=transform
         self.lookBack=lookBack
+        self.num_features=32
+
+        # remove first fc layer after CNNs
+        # min_model.fc1 = Identity()
+        # min_model.bn4 = Identity()
+
+        # remove second fc layer after CNNs
+        min_model.fc2 = Identity()
+        min_model.bn5 = Identity()
+
+        # remove last layer
+        min_model.sigmoid = Identity()
+        min_model.fc3 = Identity()
+
+        self.min_model = min_model
 
         # self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True) # first number is input size = 1? sequence length is 10
         # (batch_size, sequence_length, number_features)
-        self.rnn1 = torch.nn.LSTM(1, rn1, 1, batch_first=True)
-
-
+        self.rnn1 = torch.nn.LSTM(self.num_features, rn1, 1, batch_first=True)
         self.fc1 = torch.nn.Linear(rn1, out1)  # 1496 - kernal 5 and pool 4
         self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
         # self.fc2 = torch.nn.Linear(out3, out4)
@@ -272,7 +293,7 @@ class Short(torch.nn.Module):
 
         batch_size = x.detach().numpy().shape[0]
         sequence_length = 10*self.lookBack
-        num_features = 1
+        num_features = self.num_features
         input_channels = 16
         sample_trim = 239600*self.lookBack
 
@@ -287,6 +308,7 @@ class Short(torch.nn.Module):
             x = x.view((batch_size, input_channels, sequence_length, int(sample_trim/sequence_length)))
             x = x.transpose(1,2) # (batch_size, seq_length, channels, t)
             x = x.reshape((batch_size*sequence_length, input_channels, int(sample_trim/sequence_length)))
+            print('x before transform', x.detach().numpy().shape)
 
             if self.transform:
                 # print(x.size)
@@ -295,10 +317,15 @@ class Short(torch.nn.Module):
                 for sample in range(batch_size*sequence_length):
                     x_[sample] = self.transform(x[sample])
                 x = x_
-            x = self.min_model(x) # (batch_size*seq_length, 1)
-            x = x.view(batch_size, sequence_length)  # (Batch_size, seq_length)
+            print('x at after transform', x.detach().numpy().shape)
 
-        x = x.view((batch_size, sequence_length, num_features))  # (batch_size, seq_length, num_features)
+            x = self.min_model(x) # (batch_size*seq_length, 1)
+
+            print('x after minmodel', x.detach().numpy().shape)
+
+            x = x.view(batch_size, sequence_length, num_features)  # (Batch_size, seq_length)
+
+        # x = x.view((batch_size, sequence_length, num_features))  # (batch_size, seq_length, num_features)
         x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))  # (batch_size, seq_length, hidden_size)
         # x=torch.relu(x)
         x = x.reshape((batch_size*sequence_length, self.rn1))# (batch_size * seq_length, hidden_size)
@@ -325,13 +352,28 @@ class Medium(torch.nn.Module):
         super(Medium, self).__init__()
 
         self.min_model_path = min_model_path
-        self.min_model = load_model(min_model_path)
+        min_model = load_model(min_model_path)
         self.rn1=rn1
         self.out1=out1
         self.transform=transform
         self.hrsBack=hrsBack
+        self.num_features = 32
 
-        self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True)
+        # remove first fc layer after CNNs
+        # min_model.fc1 = Identity()
+        # min_model.bn4 = Identity()
+
+        # remove second fc layer after CNNs
+        min_model.fc2 = Identity()
+        min_model.bn5 = Identity()
+
+        # remove last layer
+        min_model.sigmoid = Identity()
+        min_model.fc3 = Identity()
+
+        self.min_model = min_model
+
+        self.rnn1 = torch.nn.LSTM(self.num_features, 16, 1, batch_first=True)
 
         self.fc1 = torch.nn.Linear(rn1, out1)
         self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
@@ -342,7 +384,7 @@ class Medium(torch.nn.Module):
     def forward(self, x):
         batch_size = x.detach().numpy().shape[0]
         sequence_length = self.hrsBack + 1
-        num_features=1
+        num_features=self.num_features
         input_channels=16
         sample_trim = 23960
 
@@ -362,9 +404,7 @@ class Medium(torch.nn.Module):
                 x = x_
 
             x = self.min_model(x)
-            x = x.view(batch_size, sequence_length)
-
-        x = x.view((batch_size, sequence_length, num_features))
+            x = x.view(batch_size, sequence_length, num_features)
 
         x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))
         # x = torch.relu(x) # may remove
@@ -379,7 +419,7 @@ class Medium(torch.nn.Module):
         out = self.sigmoid(x)
         out = out.reshape((batch_size, sequence_length, 1))
 
-        out = out[:, -1, :]
+        out = out[:, -1, :]  # out[:, -1, :]
 
         return out
 
@@ -390,13 +430,28 @@ class Long(torch.nn.Module):
         super(Long, self).__init__()
 
         self.min_model_path = min_model_path
-        self.min_model = load_model(min_model_path)
+        min_model = load_model(min_model_path)
         self.rn1 = rn1
         self.out1 = out1
         self.transform = transform
         self.days_back = daysBack
+        self.num_features = 32  # -remove one layer: 16. remove all layers: 64*13*13
 
-        self.rnn1 = torch.nn.LSTM(1, 16, 1, batch_first=True)
+        # remove first fc layer after CNNs
+        # min_model.fc1 = Identity()
+        # min_model.bn4 = Identity()
+
+        # remove second fc layer after CNNs
+        min_model.fc2 = Identity()
+        min_model.bn5 = Identity()
+
+        # remove last layer
+        min_model.sigmoid = Identity()
+        min_model.fc3 = Identity()
+
+        self.min_model = min_model
+
+        self.rnn1 = torch.nn.LSTM(self.num_features, 16, 1, batch_first=True)
 
         self.fc1 = torch.nn.Linear(rn1, out1)
         self.bn1 = torch.nn.BatchNorm1d(num_features=out1)
@@ -408,7 +463,7 @@ class Long(torch.nn.Module):
 
         batch_size = x.detach().numpy().shape[0]
         sequence_length = self.days_back + 1
-        num_features = 1
+        num_features = self.num_features
         input_channels = 16
         sample_trim = 23960
 
@@ -427,9 +482,7 @@ class Long(torch.nn.Module):
                 x = x_
 
             x = self.min_model(x)
-            x = x.view((batch_size, sequence_length))
-
-        x = x.view((batch_size, sequence_length, num_features))
+            x = x.view((batch_size, sequence_length, num_features))
 
         x, (h1, c1) = self.rnn1(x, (self.h0, self.c0))
 
@@ -443,7 +496,7 @@ class Long(torch.nn.Module):
         out = self.sigmoid(x)
         out = out.reshape((batch_size, sequence_length, 1))
 
-        out = out[:, -1, :]
+        out = out[:, -1, :]  # out[:, -1, :]
 
         return out
 
