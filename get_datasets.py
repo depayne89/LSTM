@@ -67,8 +67,7 @@ def zipper_samples(sz_times, inter_times):
 
 # def medium_times()
 
-
-class WholeDataset(Dataset):
+class WholeDataset_1min(Dataset):
 
     def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None):
         self.iPt = iPt
@@ -81,11 +80,13 @@ class WholeDataset(Dataset):
         if not train:
             self.set = 'test'
 
-        f = h5py.File('/media/NVdata/SzTimes/all_train_2step_%d_%d.mat' % (train_percent, iPt), 'r')
+        f = h5py.File('/media/NVdata/SzTimes/all_' + self.set + '_2step_%d_%d.mat' % (train_percent, iPt), 'r')
         self.labels = np.asarray(f['sample_labels'])
         self.times = np.asarray(f['sample_times'])
         f.close()
 
+    def __len__(self):
+        return self.labels.size
 
     def test(self):
         print(self.labels)
@@ -96,15 +97,96 @@ class WholeDataset(Dataset):
     def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
 
         y = self.labels[idx]
-        if y==2 or y==-1:
+        if y!=1:
             y=0
 
         start = self.times[idx]
-        end = start + 600
+        x = torch.tensor(np.zeros((10, 16, 120, 120)), dtype=torch.float)
 
-        x = cd.get_data(self.iPt, start, end)
+        for i in range(10):
+            end = start + 60
 
-        return torch.tensor(x), torch.tensor(y)
+            tmp = cd.get_data(self.iPt, start, end)
+            tmp_trim = tmp[:, :23960]
+            tmp_trim[np.isnan(tmp_trim)] = 0
+
+            tmp_tensor = torch.tensor(tmp_trim, dtype=torch.float)
+            tmp_trans = self.transform(tmp_tensor)
+            x[i] = tmp_trans
+            start=end
+
+        return x, torch.tensor(y, dtype=torch.float)
+
+
+
+class WholeDataset(Dataset):
+
+    def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None, lastOnly = False):
+        self.iPt = iPt
+        self.transform = transform
+        self.train = train
+        self.train_percent = train_percent
+        self.stepback=stepback
+        self.rawDir = '/media/NVdata/Patient_' + cd.get_patient(iPt) + '/'
+        self.set = 'train'
+        if not train:
+            self.set = 'test'
+        self.lastOnly = lastOnly
+
+        f = h5py.File('/media/NVdata/SzTimes/all_' + self.set + '_2step_%d_%d.mat' % (train_percent, iPt), 'r')
+        self.labels = np.asarray(f['sample_labels'])
+        self.times = np.asarray(f['sample_times'])
+        f.close()
+
+    def __len__(self):
+        return self.labels.size
+
+    def test(self):
+        print(self.labels)
+
+    # def __len__(self):
+    #     return self.len
+
+    def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
+
+        y = self.labels[idx]
+        if y!=1:
+            y=0
+
+        start = self.times[idx]
+        if self.transform is not None:
+            x = torch.tensor(np.zeros((10, 16, 120, 120)), dtype=torch.float)
+        else:
+            x = torch.tensor(np.zeros((10,16,23960)), dtype=torch.float)
+
+        if self.lastOnly:
+            start += 540
+            end = start + 60
+
+            tmp = cd.get_data(self.iPt, start, end)
+            tmp_trim = tmp[:, :23960]
+            tmp_trim[np.isnan(tmp_trim)] = 0
+
+            tmp_tensor = torch.tensor(tmp_trim, dtype=torch.float)
+            if self.transform is not None:
+                tmp_tensor = self.transform(tmp_tensor)
+            x = tmp_tensor
+        else:
+            for i in range(10):
+                end = start + 60
+
+                tmp = cd.get_data(self.iPt, start, end)
+                tmp_trim = tmp[:, :23960]
+                tmp_trim[np.isnan(tmp_trim)] = 0
+
+                tmp_tensor = torch.tensor(tmp_trim, dtype=torch.float)
+                if self.transform is not None:
+                    tmp_tensor = self.transform(tmp_tensor)
+                x[i] = tmp_tensor
+                start=end
+
+        return x, torch.tensor(y, dtype=torch.float)
+
 
 
 class BalancedData(Dataset):
@@ -147,8 +229,6 @@ class BalancedData(Dataset):
 
     def __len__(self):
         return self.len
-
-
 
 
     def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!

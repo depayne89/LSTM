@@ -374,6 +374,7 @@ def spectrogram(data):
     # print('Out tensor', out.numpy().shape)
     for i in range(16):
         y = data[i]
+        # print('y', y.shape)
         spec = spec_transform(y)
         # print('spec shape', spec.numpy().shape)
         # spec = np.log10(spec)

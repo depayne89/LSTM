@@ -18,11 +18,11 @@ import model_functions as mf
 
 # -------------- Options -------------------
 patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
-# patients = [8, 9, 10, 11, 13, 15]  # patient list (1-15)
+# patients = [13, 15]  # patient list (1-15)
 
 # patients = [1,6]  # patient list (1-15)
 
-# patients = [6]  # patient list (1-15)
+# patients = [10]  # patient list (1-15)
 
 model_type = '1min'
 model_type = 'short'
@@ -31,7 +31,8 @@ model_type = 'long'
 # model_type = 'combo'
 
 train = 0   # binary, whether to train a new model
-test = 1    # binary, whether to test the model
+test = 0    # binary, whether to test the model
+test_on_whole = 1
 use_existing_results = 0  # determines whether existing results should be gathered
 test_iterations = 3  # odd, How many test sets to take median from
 
@@ -72,7 +73,6 @@ min_fc1 = 32  # 128
 min_fc2 = 16
 
 
-# short
 
 def train_model(untrained_model, dataset, test_dataset, model_name, model_path):
     batches_per_epoch = np.ceil(dataset.len / batch_size)
@@ -217,28 +217,28 @@ for pt in patients:
             sys.exit(0)
 
 
-
-    # Load model
-    if model_type == '1min':
-        trained_model = models.load_model(min_model_path)
-    elif model_type == 'short':
-        trained_model = models.load_model(short_model_path)
-        # trained_model.forward = types.MethodType(tt.replacement_forward_short, trained_model)
-    elif model_type == 'medium':
-        trained_model = models.load_model(medium_model_path)
-        # trained_model.forward = types.MethodType(tt.replacement_forward_medium, trained_model)
-    elif model_type == 'long':
-        trained_model = models.load_model(long_model_path)
-        # trained_model.forward = types.MethodType(tt.replacement_forward_long, trained_model)
-    elif model_type == 'combo':
-        trained_model = models.load_model(combo_model_path)
-    else:
-        print('Model type not found')
-        sys.exit(0)
-
     # ---------- Test Model ----------
 
     if test:
+
+        # Load model
+        if model_type == '1min':
+            trained_model = models.load_model(min_model_path)
+        elif model_type == 'short':
+            trained_model = models.load_model(short_model_path)
+            # trained_model.forward = types.MethodType(tt.replacement_forward_short, trained_model)
+        elif model_type == 'medium':
+            trained_model = models.load_model(medium_model_path)
+            # trained_model.forward = types.MethodType(tt.replacement_forward_medium, trained_model)
+        elif model_type == 'long':
+            trained_model = models.load_model(long_model_path)
+            # trained_model.forward = types.MethodType(tt.replacement_forward_long, trained_model)
+        elif model_type == 'combo':
+            trained_model = models.load_model(combo_model_path)
+        else:
+            print('Model type not found')
+            sys.exit(0)
+
         auc_a = np.zeros(test_iterations)
         lo_a = np.zeros(test_iterations)
         hi_a = np.zeros(test_iterations)
@@ -314,6 +314,156 @@ for pt in patients:
             tiws[pt - 1] = tiw_a[ind]
             zero_chances[pt - 1] = zero_chance_a[ind]
             print('Sens: %0.3f, TiW: %0.3f, zeroCh: %0.3f)' % (sen_a[ind], tiw_a[ind], zero_chance_a[ind]))
+
+    if test_on_whole:
+
+        # Load model
+        if model_type == '1min':
+            dataset = gd.WholeDataset(pt, train=False, transform=transform)
+            data_loader = DataLoader(dataset, batch_size=1)
+            min_model = models.load_model(min_model_path)
+        elif model_type == 'short':
+            dataset = gd.WholeDataset(pt, train=False, transform=None)
+            data_loader = DataLoader(dataset, batch_size=1)
+            short_model = models.load_model(short_model_path)
+            short_model.lookBack = 1
+            # trained_model.forward = types.MethodType(tt.replacement_forward_short, trained_model)
+        elif model_type == 'medium':
+            dataset = gd.WholeDataset(pt, train=False, transform=None, lastOnly=True)
+            data_loader = DataLoader(dataset, batch_size=1)
+            medium_model = models.load_model(medium_model_path)
+            medium_model.hrsBack = 0
+
+            # trained_model.forward = types.MethodType(tt.replacement_forward_medium, trained_model)
+        elif model_type == 'long':
+            dataset = gd.WholeDataset(pt, train=False, transform=None, lastOnly=True)
+            data_loader = DataLoader(dataset, batch_size=1)
+            long_model = models.load_model(long_model_path)
+            long_model.days_back = 0
+        elif model_type == 'combo':
+            combo_model = models.load_model(combo_model_path)
+        else:
+            print('Model type not found')
+            sys.exit(0)
+
+        print(len(dataset), ' samples')
+
+
+        if model_type == '1min' or model_type == 'short':
+            y_tensor = torch.tensor(np.zeros(len(dataset)*10), dtype=torch.float)
+            yhat_tensor = torch.tensor(np.zeros(len(dataset)*10), dtype=torch.float)
+        else:
+            y_tensor = torch.tensor(np.zeros(len(dataset)), dtype=torch.float)
+            yhat_tensor = torch.tensor(np.zeros(len(dataset)), dtype=torch.float)
+        i=0
+        t_o = time.time()
+        total_days = len(dataset)/144
+
+        h_short = torch.randn(1, 1, 16)
+        c_short = torch.randn(1, 1, 16)
+
+        h_medium = [torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16)]
+        c_medium = [torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16)]
+
+        h_long = [torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    ]
+        c_long = [torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16), torch.randn(1, 1, 16),
+                    ]
+
+
+        # print('h_medium shape', h_medium)
+
+        for i, (x, y) in enumerate(data_loader):
+
+            if i>0:
+                t_d = time.time() - t_o
+                day = i/144.
+                percent_done = float(i) / len(dataset)
+                time_total = t_d / float(i) * len(dataset)
+                print('Pt %d. Sample %d of %d tested' % (pt, i, len(dataset)), file=open('/media/projects/daniel_lstm/tmp/log.txt', 'w'))
+                print('\rDay %.1f of %.1f. %.0f of %.0f seconds' % (day, total_days, t_d, time_total), end="")
+                if i%100 == 0:
+                    # Save to file in case of crash
+                    # Save model
+                    # Save h and c (for LSTMs)
+                    # Save yhat and y tensors
+                    torch.save(y_tensor, '/media/projects/daniel_lstm/tmp/y_tmp.pt')
+                    torch.save(yhat_tensor, '/media/projects/daniel_lstm/tmp/yhat_tmp.pt')
+                    # Save progress to log file
+
+
+            # x, y = x.to(device), y.to(device)
+
+            if model_type == '1min':
+                y_tensor[i * 10:(i + 1) * 10] = y.type(torch.float)
+                for min in range(10):
+                    x_min = x[:,min]
+
+                    # print(x_min.detach().numpy().shape)
+
+                    yhat = min_model(x_min)
+
+                    tmp = yhat_tensor.detach().numpy()
+                    tmp[i*10+min] = yhat.detach().numpy()
+
+                    yhat_tensor = torch.tensor(tmp, dtype=float)
+            elif model_type == 'short':
+                y_tensor[i * 10:(i + 1) * 10] = y.type(torch.float)
+
+                # print('Incoming data shape ', x.detach().numpy().shape)
+                # print('Incoming hidden shape', h_short.detach().numpy().shape)
+                print('h short ', h_short)
+                yhat, h_short, c_short = short_model(x, h0=h_short, c0=c_short, save_hidden=True)
+                tmp = yhat_tensor.detach().numpy()
+                tmp[i * 10: (i+1) * 10] = yhat.detach().numpy()
+                yhat_tensor = torch.tensor(tmp, dtype=float)
+
+            elif model_type == 'medium':
+                y_tensor[i] = y.type(torch.float)
+
+                # min = x[:, -1]
+                j = i%6  # 6 parallel memories each takes one sample per hour
+                # print('h_med ',i, ' ', h_medium[j])
+
+                yhat, h_medium[j], c_medium[j] = medium_model(x, h0=h_medium[j], c0=c_medium[j], save_hidden=True)
+                # print('h_med ', i, ' ', h_medium[j])
+                tmp = yhat_tensor.detach().numpy()
+                tmp[i] = yhat.detach().numpy()
+                yhat_tensor = torch.tensor(tmp, dtype=float)
+
+            elif model_type == 'long':
+                y_tensor[i] = y.type(torch.float)
+                if i%6==0:  # only take one an hour
+                    # min = x[:, -1]
+                    j = int(i/6%24)  # 24 parallel memories each takes one sample per hour
+                    # print('i: %d, j: %d' % (i, j))
+                    # print('h_long ', i, ' ', h_long[j])
+
+                    yhat, h_long[j], c_long[j] = long_model(x, h0=h_long[j], c0=c_long[j], save_hidden=True)
+                    # print('h_long ', i, ' ', h_long[j])
+                    tmp = yhat_tensor.detach().numpy()
+                    tmp[i] = yhat.detach().numpy()
+                    yhat_tensor = torch.tensor(tmp, dtype=float)
+                else:
+                    tmp = yhat_tensor.detach().numpy()
+                    tmp[i] = tmp[i-1]
+                    yhat_tensor = torch.tensor(tmp, dtype=float)
+
+
+        torch.save(y_tensor, '/media/projects/daniel_lstm/forecasts_validation/y_' + model_type + '_%d.pt' % pt)
+        torch.save(yhat_tensor, '/media/projects/daniel_lstm/forecasts_validation/yhat_' + model_type + '_%d.pt' % pt)
+
+
 
 print('\n\n ------------  FINAL RESULTS --------------')
 for pt in patients:

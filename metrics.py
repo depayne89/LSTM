@@ -162,8 +162,9 @@ def brier_score(sz_forecasts, inter_forecasts, p_sz):
 
 def brier_skill_score(sz_forecasts, inter_forecasts, p_sz):
 
+    # print('Start bs score')
     bs = brier_score(sz_forecasts, inter_forecasts, p_sz)
-
+    # print('got bs score')
     # All forecasts the same
     # sz_forecasts_r = np.ones(sz_forecasts.shape)*p_sz
     # inter_forecasts_r = np.ones(inter_forecasts.shape)*p_sz

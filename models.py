@@ -158,10 +158,11 @@ class CNN1min_spec(torch.nn.Module):
 
         x = self.fc1(x)
         x = torch.relu(x)
-        x = self.bn4(x)
+        # print('testtest')
+        # x = self.bn4(x)
         x = self.fc2(x)
         x = torch.relu(x)
-        x = self.bn5(x)
+        # x = self.bn5(x)
 
         x = self.fc3(x)
 
@@ -287,9 +288,7 @@ class Short(torch.nn.Module):
         # c0 = torch.randn(2, 3, 20)
         # output, (hn, cn) = rnn(input, (h0, c0))
 
-
-    def forward(self, x):
-        # print('X shape in Short start ', x.detach().numpy().shape)
+    def forward(self, x, h0=None, c0=None, save_hidden = False):
 
         batch_size = x.detach().numpy().shape[0]
         sequence_length = 10*self.lookBack
@@ -297,18 +296,25 @@ class Short(torch.nn.Module):
         input_channels = 16
         sample_trim = 239600*self.lookBack
 
-        self.h0 = torch.randn(1, batch_size, self.rn1)
-        self.c0 = torch.randn(1, batch_size, self.rn1)
+        if h0 is not None:
+            self.h0 = h0
+            self.c0 = c0
+        else:
+            self.h0 = torch.randn(1, batch_size, self.rn1)
+            self.c0 = torch.randn(1, batch_size, self.rn1)
+
+        h0_np = self.h0.detach().numpy()
+        # print('h0 shape', h0_np)
 
         with torch.no_grad():
-            print('x at start', x.detach().numpy().shape)
+            # print('x at start', x.detach().numpy().shape)
             x = x[:, :, :sample_trim] # trim to reliable number
-            print('x after trim', x.detach().numpy().shape)
+            # print('x after trim', x.detach().numpy().shape)
 
             x = x.view((batch_size, input_channels, sequence_length, int(sample_trim/sequence_length)))
             x = x.transpose(1,2) # (batch_size, seq_length, channels, t)
             x = x.reshape((batch_size*sequence_length, input_channels, int(sample_trim/sequence_length)))
-            print('x before transform', x.detach().numpy().shape)
+            # print('x before transform', x.detach().numpy().shape)
 
             if self.transform:
                 # print(x.size)
@@ -317,11 +323,11 @@ class Short(torch.nn.Module):
                 for sample in range(batch_size*sequence_length):
                     x_[sample] = self.transform(x[sample])
                 x = x_
-            print('x at after transform', x.detach().numpy().shape)
+            # print('x at after transform', x.detach().numpy().shape)
 
             x = self.min_model(x) # (batch_size*seq_length, 1)
 
-            print('x after minmodel', x.detach().numpy().shape)
+            # print('x after minmodel', x.detach().numpy().shape)
 
             x = x.view(batch_size, sequence_length, num_features)  # (Batch_size, seq_length)
 
@@ -333,7 +339,9 @@ class Short(torch.nn.Module):
         # x = x.view((batch_size*sequence_length, self.rn1))  # (batch_size * seq_length, hidden_size)
 
         x = self.fc1(x)
-        # x = torch.relu(x)
+        x = torch.relu(x)
+
+
         x = self.bn1(x)
 
         x = self.fc2(x)
@@ -343,7 +351,13 @@ class Short(torch.nn.Module):
 
         out = out[:, -1, :]
 
-        return out
+        h1_np = h1.detach().numpy()
+        # print('h1 shape', h1_np)
+
+        if save_hidden:
+            return out, h1, c1
+        else:
+            return out
 
 
 class Medium(torch.nn.Module):
@@ -381,18 +395,23 @@ class Medium(torch.nn.Module):
         self.fc2 = torch.nn.Linear(out1, 1)
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, h0=None, c0=None, save_hidden=False):
         batch_size = x.detach().numpy().shape[0]
         sequence_length = self.hrsBack + 1
         num_features=self.num_features
         input_channels=16
         sample_trim = 23960
 
-        self.h0 = torch.randn(1, batch_size, self.rn1)
-        self.c0 = torch.randn(1, batch_size, self.rn1)
+        if h0 is not None:
+            self.h0 = h0
+            self.c0 = c0
+
+        else:
+            self.h0 = torch.randn(1, batch_size, self.rn1)
+            self.c0 = torch.randn(1, batch_size, self.rn1)
 
         with torch.no_grad():
-
+            # print('x shape ', x.detach().numpy().shape)
             # input shape: (batch_size, sequence_length, input_channels, sample_trim)
             x = x.reshape((batch_size*sequence_length, input_channels, sample_trim))
 
@@ -412,7 +431,10 @@ class Medium(torch.nn.Module):
 
         x = self.fc1(x)
         x = torch.relu(x)
-        x = self.bn1(x)
+        # print('x before batch norm', x.detach().numpy().shape)
+
+        if not save_hidden:
+            x = self.bn1(x) # Remove for batch size 1 (ie whole test set)
 
         x =self.fc2(x)
 
@@ -421,8 +443,10 @@ class Medium(torch.nn.Module):
 
         out = out[:, -1, :]  # out[:, -1, :]
 
-        return out
-
+        if save_hidden:
+            return out, h1, c1
+        else:
+            return out
 
 class Long(torch.nn.Module):
 
@@ -459,7 +483,7 @@ class Long(torch.nn.Module):
         self.fc2 = torch.nn.Linear(out1, 1)
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, h0=None, c0=None, save_hidden=False):
 
         batch_size = x.detach().numpy().shape[0]
         sequence_length = self.days_back + 1
@@ -467,11 +491,16 @@ class Long(torch.nn.Module):
         input_channels = 16
         sample_trim = 23960
 
-        self.h0 = torch.randn(1, batch_size, self.rn1)
-        self.c0 = torch.randn(1, batch_size, self.rn1)
+
+        if h0 is not None:
+            self.h0 = h0
+            self.c0 = c0
+        else:
+            self.h0 = torch.randn(1, batch_size, self.rn1)
+            self.c0 = torch.randn(1, batch_size, self.rn1)
 
         with torch.no_grad():
-
+            # print('x shape ', x.detach().numpy().shape)
             x = x.reshape((batch_size*sequence_length, input_channels, sample_trim))
 
             if self.transform:
@@ -490,7 +519,8 @@ class Long(torch.nn.Module):
 
         x = self.fc1(x)
         x = torch.relu(x)
-        x = self.bn1(x)
+        if not save_hidden:
+            x = self.bn1(x)  # Remove for batch size 1
 
         x = self.fc2(x)
         out = self.sigmoid(x)
@@ -498,7 +528,10 @@ class Long(torch.nn.Module):
 
         out = out[:, -1, :]  # out[:, -1, :]
 
-        return out
+        if save_hidden:
+            return out, h1, c1
+        else:
+            return out
 
 
 class Combo(torch.nn.Module):

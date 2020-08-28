@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rc
 import scipy.stats as stats
+import torch
 
 import datetime
 import time
@@ -224,3 +225,47 @@ def correlation(x, y, xlabel, ylabel):
     ax.plot(x,y, 'bo')
     ax.set_title('R: %.2f, p:%.2g' %(r, p))
     plt.show()
+
+
+def forecasts_plot(yhat, y):
+    """ Plots timeseries of every forecast over time
+
+
+    :param yhat:
+    :param y:
+    :return:
+    """
+
+    sz_inds = np.where(y==1)[0]
+    print(sz_inds)
+    plt.plot(yhat, 'grey')
+    plt.plot(sz_inds, np.ones(sz_inds.size), 'rv')
+
+
+    plt.show()
+
+# pt = 6
+# y_t = torch.load('/media/projects/daniel_lstm/forecasts_validation/y_min_%d.pt' % pt)
+# yhat_t = torch.load('/media/projects/daniel_lstm/forecasts_validation/yhat_min_%d.pt' % pt)
+#
+# y = y_t.detach().numpy()
+# yhat = yhat_t.detach().numpy()
+#
+# print(np.sum(y[y==1]))
+#
+# import metrics as met
+#
+# sz_yhat, inter_yhat = met.split_yhat(y, yhat)
+#
+# a, lo, hi = met.auc_hanleyci(sz_yhat, inter_yhat)
+# print('AUC: %0.3f (%0.3f:%0.3f)' % (a, lo, hi))
+#
+# bs, bs_ref, bss, bss_se = met.brier_skill_score(sz_yhat, inter_yhat, p_sz=0.5)
+# print('Brier: %.3g, Bss: %0.3g (%.3g)' % (bs, bss, bss_se))
+#
+# sen, tiw, zero_chance = met.sens_tiw(y, yhat, extrapolate=False)
+# print('Sens: %0.3f, TiW: %0.3f, zeroCh: %0.3f)' % (sen, tiw, zero_chance))
+#
+#
+# forecasts_plot(yhat, y)
+
