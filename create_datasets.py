@@ -258,7 +258,7 @@ def calc_drop(iPt,time):
     return drop
 
 
-def generate_dataset(patient, percent_train, steps_back=2, train=True):
+def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_length=10, infer_dropout=False):
     ''' Segments train set into 10 minutes samples and lables into ictal or interictal
 
     :param patient: (1-15)
@@ -284,17 +284,34 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
     f.close()
     # create array of timestamps every 10 minutes from start of period to end
     start = start + get_record_start(patient)
-    start_round = start + (600-start%600)  # round up to nearest 10min mark
+    start_round = start + ((sample_length*60)-start%(sample_length*60))  # round up to nearest 10min mark
     start_time = start_round - get_record_start(patient)
 
-    sample_times = np.array([])
+    num_samples = int((end-start_time) / (60*sample_length))
+    sample_times = np.zeros(num_samples)
 
-    while (start_time + 60*10) < end:
-        sample_times = np.append(sample_times, start_time)
-        start_time += 60*10
+    print('Generating times')
+    i=0
 
+    print('Num samples: %d' % num_samples)
+
+
+    # while (start_time + 60*sample_length) < end:
+    #     day = i/720
+    #     print('\r %.1f' % day, end="")
+    #     sample_times = np.append(sample_times, start_time)
+    #     start_time += 60*sample_length
+    #     i+=1
+    for i in range(num_samples):
+        day = i / 720
+        # print('\r %.1f' % start_time, end="")
+        sample_times[i] = start_time
+        start_time += 60*sample_length
+
+    # print(end)
     labels = np.zeros(sample_times.shape)
 
+    print('Labelling Seizures')
     for sztime in SzTimes:
         # print('\nSz: ', time)
         first_sample_after_sz = bisect(sample_times, sztime)
@@ -308,46 +325,63 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True):
             labels[first_sample_after_sz - i] = i-1  # immediately before = 1, 10+ min before = 2
 
     # Calculate dropouts
-    ts = time.time()
-    high = 0
-    dropout = np.zeros(sample_times.shape)
-    for i,stime in enumerate(sample_times):
-        # print(i, ' ', stime)
-        if (i+1)%100==0:
+    print('Labelling Dropout')
+    if infer_dropout:
+        if train:
+            f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'r')
+        else:
+            f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'r')
+        print(f)
+        labels_10 = np.asarray(f['sample_labels'])
+        f.close()
+        for i in range(labels_10.size):
+            if labels_10[i]<0:
+                labels[5*i: 5*(i+1)]=labels_10[i]
 
-            t = time.time() - ts
-            p_time = sample_times.shape[0] / i * t
-            to_write = '\r%d steps of %d. %0.1f out of %0.1f %d above threshold' %(i, sample_times.shape[0], t, p_time, high)
 
-            # to_write = '/r' + str(i) + ' steps of ' + str(sample_times.shape) + '. %0.1f out of %0.1f' % (t, p_time) + ' ' + high + 'above threshold'
-            stdout.write(to_write)
-            stdout.flush()
+    else:
+        ts = time.time()
+        high = 0
+        dropout = np.zeros(sample_times.shape)
+        for i,stime in enumerate(sample_times):
+            # print(i, ' ', stime)
+            if (i+1)%100==0:
 
-        drop = calc_drop(patient, stime)
-        dropout[i] = drop
-        if drop > drop_threshold:
-            high +=1
-            # print('High', time, ' ', drop)
-            labels[i] = -1
+                t = time.time() - ts
+                p_time = sample_times.shape[0] / i * t
+                to_write = '\r%d steps of %d. %0.1f out of %0.1f %d above threshold' %(i, sample_times.shape[0], t, p_time, high)
+
+                # to_write = '/r' + str(i) + ' steps of ' + str(sample_times.shape) + '. %0.1f out of %0.1f' % (t, p_time) + ' ' + high + 'above threshold'
+                stdout.write(to_write)
+                stdout.flush()
+
+            drop = calc_drop(patient, stime)
+            dropout[i] = drop
+            if drop > drop_threshold:
+                high +=1
+                # print('High', time, ' ', drop)
+                labels[i] = -1
 
     # Save to file
     if train:
-        f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'w')
+        f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (steps_back, percent_train, sample_length, patient), 'w')
         f.create_dataset('train_start', data = start_round)
         f.create_dataset('train_end', data = end)
         f.create_dataset('pred_horizon', data = steps_back * 10)
         f.create_dataset('sample_times', data = sample_times)
         f.create_dataset('sample_labels', data = labels)
-        f.create_dataset('sample_dropout', data = dropout)
+        if not infer_dropout:
+            f.create_dataset('sample_dropout', data = dropout)
         f.close()
     else:
-        f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'w')
+        f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%dmin_%d.mat' % (steps_back, percent_train, sample_length, patient), 'w')
         f.create_dataset('test_start', data=start_round)
         f.create_dataset('test_end', data=end)
         f.create_dataset('pred_horizon', data=steps_back * 10)
         f.create_dataset('sample_times', data=sample_times)
         f.create_dataset('sample_labels', data=labels)
-        f.create_dataset('sample_dropout', data = dropout)
+        if not infer_dropout:
+            f.create_dataset('sample_dropout', data = dropout)
 
         f.close()
 
@@ -398,3 +432,40 @@ def flattened_spectrogram(data):
     # plt.show()
 
     return out.view(-1,120)
+
+
+# def fill_with_noise(pt, data):
+#     # print('In NOISE')
+#     stats = np.load('/media/projects/daniel_lstm/raw_eeg_stats/%d.npy' % pt)
+#
+#     for i in range(data.shape[0]):
+#         for j in range(data.shape[1]):
+#
+#             if np.isnan(data[i,j]):
+#                 # k+=1
+#                 data[i,j] = np.random.normal() * stats[i, 1] + stats[i,0]
+#     # print(k, ' datapoints replaced')
+#
+#     return data
+
+
+def fill_with_noise(pt, data):
+    # print('In NOISE')
+    stats = np.load('/media/projects/daniel_lstm/raw_eeg_stats/%d.npy' % pt)
+
+
+    # ind = np.asarray(np.where(np.isnan(data)))
+
+    # #
+    for i in range(data.shape[0]):
+        ind = np.where(np.isnan(data[i]))
+        data[i, ind] = np.random.normal(stats[i,0], stats[i, 1], len(ind))
+
+    return data
+
+
+# for pt in [1, 6, 8, 9, 10, 11, 13, 15]:
+#     print('----  Patient %d  ---' % pt)
+#     generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=2, infer_dropout=True)
+#     generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=2, infer_dropout=True)
+# # #

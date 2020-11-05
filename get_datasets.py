@@ -69,12 +69,13 @@ def zipper_samples(sz_times, inter_times):
 
 class WholeDataset_1min(Dataset):
 
-    def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None):
+    def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None, nan_as_noise=False):
         self.iPt = iPt
         self.transform = transform
         self.train = train
         self.train_percent = train_percent
         self.stepback=stepback
+        self.nan_as_noise = nan_as_noise
         self.rawDir = '/media/NVdata/Patient_' + cd.get_patient(iPt) + '/'
         self.set = 'train'
         if not train:
@@ -108,7 +109,11 @@ class WholeDataset_1min(Dataset):
 
             tmp = cd.get_data(self.iPt, start, end)
             tmp_trim = tmp[:, :23960]
-            tmp_trim[np.isnan(tmp_trim)] = 0
+
+            if self.nan_as_noise:
+                tmp_trim = cd.fill_with_noise(self.pt, tmp_trim)
+            else:
+                tmp_trim[np.isnan(tmp_trim)] = 0
 
             tmp_tensor = torch.tensor(tmp_trim, dtype=torch.float)
             tmp_trans = self.transform(tmp_tensor)
@@ -121,7 +126,7 @@ class WholeDataset_1min(Dataset):
 
 class WholeDataset(Dataset):
 
-    def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None, lastOnly = False):
+    def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None, lastOnly = False, nan_as_noise=False):
         self.iPt = iPt
         self.transform = transform
         self.train = train
@@ -132,6 +137,7 @@ class WholeDataset(Dataset):
         if not train:
             self.set = 'test'
         self.lastOnly = lastOnly
+        self.nan_as_noise = nan_as_noise
 
         f = h5py.File('/media/NVdata/SzTimes/all_' + self.set + '_2step_%d_%d.mat' % (train_percent, iPt), 'r')
         self.labels = np.asarray(f['sample_labels'])
@@ -165,8 +171,10 @@ class WholeDataset(Dataset):
 
             tmp = cd.get_data(self.iPt, start, end)
             tmp_trim = tmp[:, :23960]
-            tmp_trim[np.isnan(tmp_trim)] = 0
-
+            if self.nan_as_noise:
+                tmp_trim = cd.fill_with_noise(self.iPt, tmp_trim)
+            else:
+                tmp_trim[np.isnan(tmp_trim)] = 0
             tmp_tensor = torch.tensor(tmp_trim, dtype=torch.float)
             if self.transform is not None:
                 tmp_tensor = self.transform(tmp_tensor)
@@ -177,7 +185,10 @@ class WholeDataset(Dataset):
 
                 tmp = cd.get_data(self.iPt, start, end)
                 tmp_trim = tmp[:, :23960]
-                tmp_trim[np.isnan(tmp_trim)] = 0
+                if self.nan_as_noise:
+                    tmp_trim = cd.fill_with_noise(self.iPt, tmp_trim)
+                else:
+                    tmp_trim[np.isnan(tmp_trim)] = 0
 
                 tmp_tensor = torch.tensor(tmp_trim, dtype=torch.float)
                 if self.transform is not None:
@@ -188,10 +199,89 @@ class WholeDataset(Dataset):
         return x, torch.tensor(y, dtype=torch.float)
 
 
+class WholeDatasetLookBack(Dataset):
+    def __init__(self, iPt, train=True, train_percent=80, stepback=2,  transform=None, lastOnly = False, lookBack=6, medium=False, long=False, nan_as_noise=False):
+        self.iPt = iPt
+        self.transform = transform
+        self.train = train
+        self.train_percent = train_percent
+        self.stepback=stepback
+        self.rawDir = '/media/NVdata/Patient_' + cd.get_patient(iPt) + '/'
+        self.lookBack = lookBack
+        self.medium = medium
+        self.long = long
+        self.set = 'train'
+        if not train:
+            self.set = 'test'
+        self.lastOnly = lastOnly
+        self.nan_as_noise = nan_as_noise
+
+        f = h5py.File('/media/NVdata/SzTimes/all_' + self.set + '_2step_%d_%d.mat' % (train_percent, iPt), 'r')
+        self.labels = np.asarray(f['sample_labels'])
+        self.times = np.asarray(f['sample_times'])
+        f.close()
+
+    def __len__(self):
+        return self.labels.size
+
+    def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
+        y = self.labels[idx]
+        if not y == 0 or not y == 1:
+            return None, y
+        else:
+
+            start = self.times[idx]
+            end = start + 600
+
+            if self.medium:
+                # start -= 60*60 # REMOVE
+                start += 60 * 9  # take last minute of the 10 min sample
+                hrs_back = 24  # this means 25 samples as we go as far as exactly 24 hrs ago
+
+                x_np = np.zeros((hrs_back + 1, 16, 23960))
+
+                for i in range(hrs_back + 1):
+                    hrs = hrs_back - i
+                    min_start = start - hrs * 60 * 60
+                    min_end = min_start + 60
+                    minute = cd.get_data(self.pt, min_start, min_end)
+                    x_np[i] = minute[:, :23960]
+
+
+            elif self.long:
+                # start -= 60*60*24
+                start += 60 * 9
+                days_back = 30  # days to look back
+
+                x_np = np.zeros((days_back + 1, 16, 23960))
+
+                for i in range(days_back + 1):
+                    days = days_back - i
+                    min_start = start - days * 24 * 60 * 60
+                    min_end = min_start + 60
+                    minute = cd.get_data(self.pt, min_start, min_end)
+                    x_np[i] = minute[:, :23960]
+
+            else:
+                # start -= 60
+                start -= 600 * (self.lookBack - 1)  # Go back 10s of minutes for more training info
+                x_np = cd.get_data(self.pt, start, end)
+
+            if self.nan_as_noise:
+                x_np = cd.fill_with_noise(self.pt, x_np)
+            else:
+                x_np[np.isnan(x_np)] = 0
+            # plt.plot(x_np[0])
+            # plt.show()
+            x = torch.tensor(x_np, dtype=torch.float32)
+            # print('X size', x.size())
+
+            return x, torch.tensor(y, dtype=torch.float32)
+
 
 class BalancedData(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1, medium=False, long=False):
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1, medium=False, long=False, nan_as_noise=False):
         self.pt=pt
         self.train_percent = train_percent
         self.stepback = stepback
@@ -200,6 +290,7 @@ class BalancedData(Dataset):
         self.lookBack = lookBack
         self.medium = medium
         self.long = long
+        self.nan_as_noise = nan_as_noise
         if train:
             f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
             self.start = f['train_start']
@@ -211,7 +302,7 @@ class BalancedData(Dataset):
         self.horizon = f['pred_horizon']
         self.times = np.asarray(f['sample_times'])
         self.labels = np.asarray(f['sample_labels'])
-        self.dropout = np.asarray(f['sample_dropout'])
+        # self.dropout = np.asarray(f['sample_dropout'])
         f.close()
 
         # print('Selecting interictal samples')
@@ -274,8 +365,10 @@ class BalancedData(Dataset):
             start -= 600 * (self.lookBack - 1)  # Go back 10s of minutes for more training info
             x_np = cd.get_data(self.pt, start, end)
 
-
-        x_np[np.isnan(x_np)]=0
+        if self.nan_as_noise:
+            x_np = cd.fill_with_noise(self.pt, x_np)
+        else:
+            x_np[np.isnan(x_np)]=0
         # plt.plot(x_np[0])
         # plt.show()
         x = torch.tensor(x_np, dtype=torch.float32)
@@ -296,13 +389,13 @@ class BalancedData(Dataset):
 
 class BalancedData1m(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False):
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False, nan_as_noise=False):
         self.pt=pt
         self.train=train
         self.train_percent=train_percent
         self.stepback=stepback
         self.transform=transform
-        self.balancedData = BalancedData(pt, train, train_percent, stepback, transform, multiple, duplicate_ictal)
+        self.balancedData = BalancedData(pt, train, train_percent, stepback, transform, multiple, duplicate_ictal, nan_as_noise=nan_as_noise)
         self.original_length = self.balancedData.len
         self.len = self.original_length*10
 
@@ -334,7 +427,7 @@ class BalancedData1m(Dataset):
 
 class BalancedSpreadData1m(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal = False):
+    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal = False, nan_as_noise=False):
         self.pt=pt
         self.train_percent = train_percent
         self.stepback = stepback
@@ -351,13 +444,17 @@ class BalancedSpreadData1m(Dataset):
         self.horizon = f['pred_horizon']
         self.times = np.asarray(f['sample_times'])
         self.labels = np.asarray(f['sample_labels'])
-        self.dropout = np.asarray(f['sample_dropout'])
+        # self.dropout = np.asarray(f['sample_dropout'])
         f.close()
+
+        print('TRansform in dataset: ', transform)
+
 
         sz_times = self.get_ictal()
         inter_times = self.get_inter()
         self.shuffle_samples(sz_times, inter_times)
         self.len = sz_times.size + inter_times.size
+        self.nan_as_noise = nan_as_noise
 
     def __len__(self):
         return self.len
@@ -406,14 +503,21 @@ class BalancedSpreadData1m(Dataset):
         self.select_labels = labels[inds]
 
     def __getitem__(self, i):
+        # print('Getting Item')
         y = self.select_labels[i]
         if y == 2 or y == -1:
             y = 0
 
+
+
         start = self.select_times[i]
         end = start + 60
         x_np = cd.get_data(self.pt, start, end)
-        x_np[np.isnan(x_np)] = 0
+
+        if self.nan_as_noise:
+            x_np = cd.fill_with_noise(self.pt, x_np)
+        else:
+            x_np[np.isnan(x_np)] = 0
         # plt.plot(x_np[0])
         # plt.show()
 
@@ -424,7 +528,6 @@ class BalancedSpreadData1m(Dataset):
         if self.transform:
             # print(x.size)
             x = self.transform(x)
-        # print('X size', x.size())
 
         return x, torch.tensor(y, dtype=torch.float32)
 
@@ -451,8 +554,9 @@ class BalancedDataCombo(Dataset):
         self.horizon = f['pred_horizon']
         self.times = np.asarray(f['sample_times'])
         self.labels = np.asarray(f['sample_labels'])
-        self.dropout = np.asarray(f['sample_dropout'])
+        # self.dropout = np.asarray(f['sample_dropout'])
         f.close()
+
 
         # print('Selecting interictal samples')
         inter_times = select_interictal(self, multiple=multiple)

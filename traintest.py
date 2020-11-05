@@ -22,6 +22,7 @@ save_forecasts = 1
 
 def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batches_per_epoch, model_name, batch_size):
 
+    print('Start train')
     loss_plot = np.empty(int(batches_per_epoch * n_epochs))
     auc_plot = np.empty(int(batches_per_epoch * n_epochs))
     vloss_plot = np.zeros(int(batches_per_epoch * n_epochs))
@@ -40,6 +41,7 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
 
             # x, y = x.to(device), y.to(device)
             # Train on batch
+            # print('First Batch')
             optimizer.zero_grad()  # clear gradient
             z = model(x)  # make prediciton
             loss = criterion(z, y)  # calculate loss

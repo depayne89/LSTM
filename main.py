@@ -20,19 +20,19 @@ import model_functions as mf
 patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
 # patients = [13, 15]  # patient list (1-15)
 
-# patients = [1,6]  # patient list (1-15)
+patients = [1,6, 8, 9]  # patient list (1-15)
 
 # patients = [10]  # patient list (1-15)
 
 model_type = '1min'
-model_type = 'short'
-model_type = 'medium'
-model_type = 'long'
+# model_type = 'short'
+# model_type = 'medium'
+# model_type = 'long'
 # model_type = 'combo'
 
 train = 0   # binary, whether to train a new model
 test = 0    # binary, whether to test the model
-test_on_whole = 1
+test_on_whole = 0
 use_existing_results = 0  # determines whether existing results should be gathered
 test_iterations = 3  # odd, How many test sets to take median from
 
@@ -44,22 +44,32 @@ show_tiw = 1
 
 # ----------- Hyperparameters ---------------
 
-combo_version = 1
-long_version = 3 # Basic (accidentaly overwritten), last_layer_off = 1
-medium_version = 5  # Basic = 2, last_layer_off = 3
-short_version = 12# Baisc = 8, last_layer off = 10
-min_version = 10  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
+# combo_version = 1
+# long_version = 6 # Basic (accidentaly overwritten), last_layer_off = 1
+# medium_version = 8  # Basic = 2, last_layer_off = 3
+# short_version = 15# Baisc = 8, last_layer off = 10
+# min_version = 12  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
 
+combo_version = 2
+long_version = 7  # Basic (accidentaly overwritten), last_layer_off = 1
+medium_version = 9  # Basic = 2, last_layer_off = 3
+short_version = 16  # Baisc = 8, last_layer off = 10
+min_version = 13  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
+
+# sample_window = 2  # original was 10 minutes, options: 2min, 4min, 10min, 20min, 60min
 data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
 duplicate_ictal = False
 use_spec = True
 transform = None
 flatten_spec = False
-short_look_back = 6  # how many samples prior to labeled sample to start training from (eg 6
+nan_as_noise = True
+# short_look_back_min = 60
+# short_look_back = short_look_back_min / sample_window # how many samples prior to labeled sample to start training from (eg 6
+short_look_back = 6
 hrs_back = 24
 days_back = 30
 
-n_epochs = 5
+n_epochs = 2
 min_batch_size = 160  # for 1mBalanced: 20 samples / sz
 batch_size = 16
 learning_rate = .001
@@ -74,7 +84,7 @@ min_fc2 = 16
 
 
 
-def train_model(untrained_model, dataset, test_dataset, model_name, model_path):
+def train_model(untrained_model, dataset, test_dataset, model_name, model_path, batch_size):
     batches_per_epoch = np.ceil(dataset.len / batch_size)
 
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
@@ -181,37 +191,42 @@ for pt in patients:
         if model_type == '1min':
             train_model(model,
                         gd.BalancedSpreadData1m(pt=pt, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal,
-                                                transform=transform),
-                        gd.BalancedSpreadData1m(pt=pt, train=False, stepback=2, transform=transform), min_model_name,
-                        min_model_path)
+                                                transform=transform, nan_as_noise=nan_as_noise),
+                        gd.BalancedSpreadData1m(pt=pt, train=False, stepback=2, transform=transform, nan_as_noise=nan_as_noise),
+                        min_model_name, min_model_path, batch_size=min_batch_size)
         elif model_type == 'short':
             train_model(model,
-                        dataset=gd.BalancedData(pt=pt, stepback=2, transform=transform, lookBack=short_look_back),
-                        test_dataset=gd.BalancedData(pt=pt, stepback=2, transform=transform, train=False, lookBack=short_look_back),
+                        dataset=gd.BalancedData(pt=pt, stepback=2, transform=transform, lookBack=short_look_back, nan_as_noise=nan_as_noise),
+                        test_dataset=gd.BalancedData(pt=pt, stepback=2, transform=transform, train=False, lookBack=short_look_back, nan_as_noise=nan_as_noise),
                         model_name=short_model_name,
-                        model_path=short_model_path
+                        model_path=short_model_path,
+                        batch_size=batch_size
                         )
             print('')
         elif model_type == 'medium':
             train_model(model,
-                        dataset=gd.BalancedData(pt=pt, train=True, stepback=2, transform=transform, medium=True),
-                        test_dataset=gd.BalancedData(pt=pt, train=False, stepback=2, transform=transform, medium=True),
+                        dataset=gd.BalancedData(pt=pt, train=True, stepback=2, transform=transform, medium=True, nan_as_noise=nan_as_noise),
+                        test_dataset=gd.BalancedData(pt=pt, train=False, stepback=2, transform=transform, medium=True, nan_as_noise=nan_as_noise),
                         model_name=medium_model_name,
-                        model_path=medium_model_path
+                        model_path=medium_model_path,
+                        batch_size=batch_size
                         )
         elif model_type == 'long':
             train_model(model,
-                        dataset=gd.BalancedData(pt=pt, train=True, stepback=2, transform=transform, long=True),
-                        test_dataset=gd.BalancedData(pt=pt, train=False, stepback=2, transform=transform, long=True),
+                        dataset=gd.BalancedData(pt=pt, train=True, stepback=2, transform=transform, long=True, nan_as_noise=nan_as_noise),
+                        test_dataset=gd.BalancedData(pt=pt, train=False, stepback=2, transform=transform, long=True, nan_as_noise=nan_as_noise),
                         model_name=long_model_name,
-                        model_path=long_model_path
+                        model_path=long_model_path,
+                        batch_size=batch_size
                         )
         elif model_type == 'combo':
             train_model(model,
-                        dataset = gd.BalancedDataCombo(pt=pt, train=True, transform=transform, lookBack=6),
-                        test_dataset = gd.BalancedDataCombo(pt=pt, train=False, transform=transform, lookBack=6),
+                        dataset = gd.BalancedDataCombo(pt=pt, train=True, transform=transform, lookBack=6, nan_as_noise=nan_as_noise),
+                        test_dataset = gd.BalancedDataCombo(pt=pt, train=False, transform=transform, lookBack=6, nan_as_noise=nan_as_noise),
                         model_name=combo_model_name,
-                        model_path=combo_model_path)
+                        model_path=combo_model_path,
+                        batch_size=batch_size
+                        )
         else:
             print('Model type not found')
             sys.exit(0)
@@ -251,19 +266,19 @@ for pt in patients:
 
         for j in range(test_iterations):
             if model_type == '1min':
-                test_data = gd.BalancedSpreadData1m(pt=pt, train=False, transform=transform)
+                test_data = gd.BalancedSpreadData1m(pt=pt, train=False, transform=transform, nan_as_noise=nan_as_noise)
                 model_name = min_model_name
             elif model_type == 'short':
-                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, lookBack=short_look_back)
+                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, lookBack=short_look_back, nan_as_noise=nan_as_noise)
                 model_name = short_model_name
             elif model_type == 'medium':
-                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, medium=True)
+                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, medium=True, nan_as_noise=nan_as_noise)
                 model_name = medium_model_name
             elif model_type == 'long':
-                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, long=True)
+                test_data = gd.BalancedData(pt=pt, train=False, transform=transform, long=True, nan_as_noise=nan_as_noise)
                 model_name = long_model_name
             elif model_type == 'combo':
-                test_data = gd.BalancedDataCombo(pt=pt, train=False, transform=transform, lookBack=6)
+                test_data = gd.BalancedDataCombo(pt=pt, train=False, transform=transform, lookBack=6, nan_as_noise=nan_as_noise)
                 model_name = combo_model_name
             else:
                 print('Model not found during valedation', model_type)
@@ -319,24 +334,24 @@ for pt in patients:
 
         # Load model
         if model_type == '1min':
-            dataset = gd.WholeDataset(pt, train=False, transform=transform)
+            dataset = gd.WholeDataset(pt, train=False, transform=transform, nan_as_noise=nan_as_noise)
             data_loader = DataLoader(dataset, batch_size=1)
             min_model = models.load_model(min_model_path)
         elif model_type == 'short':
-            dataset = gd.WholeDataset(pt, train=False, transform=None)
+            dataset = gd.WholeDataset(pt, train=False, transform=None, nan_as_noise=nan_as_noise)
             data_loader = DataLoader(dataset, batch_size=1)
             short_model = models.load_model(short_model_path)
             short_model.lookBack = 1
             # trained_model.forward = types.MethodType(tt.replacement_forward_short, trained_model)
         elif model_type == 'medium':
-            dataset = gd.WholeDataset(pt, train=False, transform=None, lastOnly=True)
+            dataset = gd.WholeDataset(pt, train=False, transform=None, lastOnly=True, nan_as_noise=nan_as_noise)
             data_loader = DataLoader(dataset, batch_size=1)
             medium_model = models.load_model(medium_model_path)
             medium_model.hrsBack = 0
 
             # trained_model.forward = types.MethodType(tt.replacement_forward_medium, trained_model)
         elif model_type == 'long':
-            dataset = gd.WholeDataset(pt, train=False, transform=None, lastOnly=True)
+            dataset = gd.WholeDataset(pt, train=False, transform=None, lastOnly=True, nan_as_noise=nan_as_noise)
             data_loader = DataLoader(dataset, batch_size=1)
             long_model = models.load_model(long_model_path)
             long_model.days_back = 0
@@ -405,6 +420,7 @@ for pt in patients:
             # x, y = x.to(device), y.to(device)
 
             if model_type == '1min':
+                name = '1min_v%d' % min_version
                 y_tensor[i * 10:(i + 1) * 10] = y.type(torch.float)
                 for min in range(10):
                     x_min = x[:,min]
@@ -418,6 +434,8 @@ for pt in patients:
 
                     yhat_tensor = torch.tensor(tmp, dtype=float)
             elif model_type == 'short':
+                name = 'short_v%d' % short_version
+
                 y_tensor[i * 10:(i + 1) * 10] = y.type(torch.float)
 
                 # print('Incoming data shape ', x.detach().numpy().shape)
@@ -429,6 +447,8 @@ for pt in patients:
                 yhat_tensor = torch.tensor(tmp, dtype=float)
 
             elif model_type == 'medium':
+                name = 'med_v%d' % medium_version
+
                 y_tensor[i] = y.type(torch.float)
 
                 # min = x[:, -1]
@@ -442,6 +462,8 @@ for pt in patients:
                 yhat_tensor = torch.tensor(tmp, dtype=float)
 
             elif model_type == 'long':
+                name = 'long_v%d' % long_version
+
                 y_tensor[i] = y.type(torch.float)
                 if i%6==0:  # only take one an hour
                     # min = x[:, -1]
@@ -460,8 +482,8 @@ for pt in patients:
                     yhat_tensor = torch.tensor(tmp, dtype=float)
 
 
-        torch.save(y_tensor, '/media/projects/daniel_lstm/forecasts_validation/y_' + model_type + '_%d.pt' % pt)
-        torch.save(yhat_tensor, '/media/projects/daniel_lstm/forecasts_validation/yhat_' + model_type + '_%d.pt' % pt)
+        torch.save(y_tensor, '/media/projects/daniel_lstm/forecasts_validation/y_' + name + '_%d.pt' % pt)
+        torch.save(yhat_tensor, '/media/projects/daniel_lstm/forecasts_validation/yhat_' + name + '_%d.pt' % pt)
 
 
 

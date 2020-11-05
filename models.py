@@ -135,7 +135,7 @@ class CNN1min_spec(torch.nn.Module):
 
     def forward(self, x):
         # print('In Forward x require grad? ', x.requires_grad)
-        # print('X shape', x.detach().numpy().shape)
+        # print('X shape in forward', x.detach().numpy().shape)
         # print('X type', x.detach().type())
         x = self.cnn1(x)
         x = torch.relu(x)
