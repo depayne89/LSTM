@@ -244,7 +244,7 @@ class CNN1min(torch.nn.Module):
 
 class Short(torch.nn.Module):
 
-    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, lookBack = 1):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, lookBack = 1, sample_window=10):
         super(Short, self).__init__()
 
         self.min_model_path = min_model_path
@@ -253,6 +253,7 @@ class Short(torch.nn.Module):
         self.out1=out1
         self.transform=transform
         self.lookBack=lookBack
+        self.sample_window=sample_window
         self.num_features=32
 
         # remove first fc layer after CNNs
@@ -291,10 +292,10 @@ class Short(torch.nn.Module):
     def forward(self, x, h0=None, c0=None, save_hidden = False):
 
         batch_size = x.detach().numpy().shape[0]
-        sequence_length = 10*self.lookBack
+        sequence_length = self.sample_window * self.lookBack
         num_features = self.num_features
         input_channels = 16
-        sample_trim = 239600*self.lookBack
+        sample_trim = 23960 * self.sample_window * self.lookBack
 
         if h0 is not None:
             self.h0 = h0

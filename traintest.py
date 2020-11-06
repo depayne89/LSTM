@@ -85,8 +85,11 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
 
             z_np_ = np.array([])
             y_np_ = np.array([])
-
+            l = None
+            print('Before loss calc')
             for x_, y_ in test_loader:
+                print('Calculating loss')
+
                 z_ = model(x_)
 
                 l = criterion(z_, y_)
@@ -98,7 +101,7 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
                 z_np_ = np.append(z_np, z_.detach().numpy().flatten())
                 y_np_ = np.append(y_np, y_.detach().numpy().flatten())
 
-
+            print('After loss calc')
             vloss_plot[vloss_ind] = l.item()
             vauc_plot[vloss_ind] = a
             vis.loss_and_auc(loss_plot, auc_plot, vloss_plot, vauc_plot, model_name, batches_per_epoch, n_epochs)

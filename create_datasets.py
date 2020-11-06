@@ -6,7 +6,9 @@ import time
 from scipy import signal
 import torchaudio
 import torch
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+from datetime import datetime
+
 
 # import visualize as vis
 
@@ -259,7 +261,7 @@ def calc_drop(iPt,time):
 
 
 def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_length=10, infer_dropout=False):
-    ''' Segments train set into 10 minutes samples and lables into ictal or interictal
+    ''' Segments train set into x minutes samples and lables into ictal or interictal
 
     :param patient: (1-15)
     :param steps_back: how many 10 minute samples before seizure to lable ictal (ie prediciton horizon = stepsback*10)
@@ -280,6 +282,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
         start = np.asarray(f['cutoff'])
         end = get_record_length(patient)
         SzTimes = np.asarray(f['test'])
+
 
     f.close()
     # create array of timestamps every 10 minutes from start of period to end
@@ -325,6 +328,8 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
             labels[first_sample_after_sz - i] = i-1  # immediately before = 1, 10+ min before = 2
 
     # Calculate dropouts
+    sz_labels = labels[labels==1]
+    print('Sz Count b4 drop, ', sz_labels.shape)
     print('Labelling Dropout')
     if infer_dropout:
         if train:
@@ -333,10 +338,11 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
             f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'r')
         print(f)
         labels_10 = np.asarray(f['sample_labels'])
+
         f.close()
         for i in range(labels_10.size):
-            if labels_10[i]<0:
-                labels[5*i: 5*(i+1)]=labels_10[i]
+            if labels_10[i]==-1:
+                labels[5*i: 5*(i+1)]=-1
 
 
     else:
@@ -348,12 +354,15 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
             if (i+1)%100==0:
 
                 t = time.time() - ts
+                now = datetime.now()
                 p_time = sample_times.shape[0] / i * t
-                to_write = '\r%d steps of %d. %0.1f out of %0.1f %d above threshold' %(i, sample_times.shape[0], t, p_time, high)
+                to_write = str(now) + ' Patient %d %dmins set%d. %d steps of %d. %0.1f out of %0.1f %d above threshold' % (pt, sample_length,1- int(train), i, sample_times.shape[0], t/60., p_time/60., high)
+
+                print(to_write, file=open('/media/projects/daniel_lstm/tmp/data_build_log.txt', 'w'))
 
                 # to_write = '/r' + str(i) + ' steps of ' + str(sample_times.shape) + '. %0.1f out of %0.1f' % (t, p_time) + ' ' + high + 'above threshold'
-                stdout.write(to_write)
-                stdout.flush()
+                # stdout.write(to_write)
+                # stdout.flush()
 
             drop = calc_drop(patient, stime)
             dropout[i] = drop
@@ -362,12 +371,15 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
                 # print('High', time, ' ', drop)
                 labels[i] = -1
 
+    sz_labels = labels[labels == 1]
+    print('Sz Count after drop, %d' % sz_labels.shape[0], )
+
     # Save to file
     if train:
         f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (steps_back, percent_train, sample_length, patient), 'w')
         f.create_dataset('train_start', data = start_round)
         f.create_dataset('train_end', data = end)
-        f.create_dataset('pred_horizon', data = steps_back * 10)
+        f.create_dataset('pred_horizon', data = steps_back * sample_length)
         f.create_dataset('sample_times', data = sample_times)
         f.create_dataset('sample_labels', data = labels)
         if not infer_dropout:
@@ -377,7 +389,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
         f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%dmin_%d.mat' % (steps_back, percent_train, sample_length, patient), 'w')
         f.create_dataset('test_start', data=start_round)
         f.create_dataset('test_end', data=end)
-        f.create_dataset('pred_horizon', data=steps_back * 10)
+        f.create_dataset('pred_horizon', data=steps_back * sample_length)
         f.create_dataset('sample_times', data=sample_times)
         f.create_dataset('sample_labels', data=labels)
         if not infer_dropout:
@@ -463,9 +475,10 @@ def fill_with_noise(pt, data):
 
     return data
 
+for pt in [1, 6, 8, 9, 10, 11, 13, 15]:
+    print('----  Patient %d  ---' % pt)
+    for length in [2,10]:
+        generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=2, infer_dropout=False)
+        generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=2, infer_dropout=False)
+# #
 
-# for pt in [1, 6, 8, 9, 10, 11, 13, 15]:
-#     print('----  Patient %d  ---' % pt)
-#     generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=2, infer_dropout=True)
-#     generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=2, infer_dropout=True)
-# # #

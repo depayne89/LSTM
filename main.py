@@ -7,7 +7,7 @@ import time
 import sys, os
 import types
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 import create_datasets as cd
 import models
@@ -20,7 +20,7 @@ import model_functions as mf
 patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
 # patients = [13, 15]  # patient list (1-15)
 
-patients = [1,6, 8, 9]  # patient list (1-15)
+# patients = [1,6, 8, 9]  # patient list (1-15)
 
 # patients = [10]  # patient list (1-15)
 
@@ -31,7 +31,7 @@ model_type = '1min'
 # model_type = 'combo'
 
 train = 0   # binary, whether to train a new model
-test = 0    # binary, whether to test the model
+test = 1    # binary, whether to test the model
 test_on_whole = 0
 use_existing_results = 0  # determines whether existing results should be gathered
 test_iterations = 3  # odd, How many test sets to take median from
@@ -56,16 +56,15 @@ medium_version = 9  # Basic = 2, last_layer_off = 3
 short_version = 16  # Baisc = 8, last_layer off = 10
 min_version = 13  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
 
-# sample_window = 2  # original was 10 minutes, options: 2min, 4min, 10min, 20min, 60min
+sample_window = 2  # original was 10 minutes, options: 2min, 4min, 10min, 20min, 60min
 data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
 duplicate_ictal = False
 use_spec = True
 transform = None
 flatten_spec = False
 nan_as_noise = True
-# short_look_back_min = 60
-# short_look_back = short_look_back_min / sample_window # how many samples prior to labeled sample to start training from (eg 6
-short_look_back = 6
+short_look_back_min = 60
+short_look_back = short_look_back_min / sample_window # how many samples prior to labeled sample to start training from (eg 6
 hrs_back = 24
 days_back = 30
 
@@ -190,14 +189,14 @@ for pt in patients:
         # ----- HERE HERE HERE -----
         if model_type == '1min':
             train_model(model,
-                        gd.BalancedSpreadData1m(pt=pt, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal,
+                        gd.BalancedSpreadData1m(pt=pt, sample_window= sample_window, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal,
                                                 transform=transform, nan_as_noise=nan_as_noise),
-                        gd.BalancedSpreadData1m(pt=pt, train=False, stepback=2, transform=transform, nan_as_noise=nan_as_noise),
+                        gd.BalancedSpreadData1m(pt=pt, sample_window= sample_window, train=False, stepback=2, transform=transform, nan_as_noise=nan_as_noise),
                         min_model_name, min_model_path, batch_size=min_batch_size)
         elif model_type == 'short':
             train_model(model,
-                        dataset=gd.BalancedData(pt=pt, stepback=2, transform=transform, lookBack=short_look_back, nan_as_noise=nan_as_noise),
-                        test_dataset=gd.BalancedData(pt=pt, stepback=2, transform=transform, train=False, lookBack=short_look_back, nan_as_noise=nan_as_noise),
+                        dataset=gd.BalancedData(pt=pt, sample_window= sample_window, stepback=2, transform=transform, lookBack=short_look_back, nan_as_noise=nan_as_noise),
+                        test_dataset=gd.BalancedData(pt=pt, sample_window= sample_window, stepback=2, transform=transform, train=False, lookBack=short_look_back, nan_as_noise=nan_as_noise),
                         model_name=short_model_name,
                         model_path=short_model_path,
                         batch_size=batch_size

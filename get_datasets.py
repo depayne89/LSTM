@@ -4,7 +4,7 @@ import h5py
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchaudio
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import math
 
 import create_datasets as cd
@@ -281,9 +281,10 @@ class WholeDatasetLookBack(Dataset):
 
 class BalancedData(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1, medium=False, long=False, nan_as_noise=False):
+    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1, medium=False, long=False, nan_as_noise=False, ):
         self.pt=pt
         self.train_percent = train_percent
+        self.sample_window = sample_window
         self.stepback = stepback
         self.transform = transform
         self.train = train
@@ -292,11 +293,11 @@ class BalancedData(Dataset):
         self.long = long
         self.nan_as_noise = nan_as_noise
         if train:
-            f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+            f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
             self.start = f['train_start']
             self.end = f['train_end']
         else:
-            f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+            f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
             self.start = f['test_start']
             self.end = f['test_end']
         self.horizon = f['pred_horizon']
@@ -329,11 +330,11 @@ class BalancedData(Dataset):
             y = 0
 
         start = self.select_times[idx]
-        end = start + 600
+        end = start + 60*self.sample_window
 
         if self.medium:
             # start -= 60*60 # REMOVE
-            start += 60*9  # take last minute of the 10 min sample
+            start += 60*(self.sample_window-1)  # take last minute of the x min sample
             hrs_back = 24  # this means 25 samples as we go as far as exactly 24 hrs ago
 
             x_np = np.zeros((hrs_back+1, 16, 23960))
@@ -348,7 +349,7 @@ class BalancedData(Dataset):
 
         elif self.long:
             # start -= 60*60*24
-            start += 60 * 9
+            start += 60 * (self.sample_window-1)
             days_back = 30  # days to look back
 
             x_np = np.zeros((days_back+1, 16, 23960))
@@ -362,7 +363,7 @@ class BalancedData(Dataset):
 
         else:
             # start -= 60
-            start -= 600 * (self.lookBack - 1)  # Go back 10s of minutes for more training info
+            start -= 60 * (self.sample_window) * (self.lookBack - 1)  # Go back 10s of minutes for more training info
             x_np = cd.get_data(self.pt, start, end)
 
         if self.nan_as_noise:
@@ -389,10 +390,11 @@ class BalancedData(Dataset):
 
 class BalancedData1m(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal=False, nan_as_noise=False):
+    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal=False, nan_as_noise=False):
         self.pt=pt
         self.train=train
         self.train_percent=train_percent
+        self.sample_window = sample_window
         self.stepback=stepback
         self.transform=transform
         self.balancedData = BalancedData(pt, train, train_percent, stepback, transform, multiple, duplicate_ictal, nan_as_noise=nan_as_noise)
@@ -404,8 +406,8 @@ class BalancedData1m(Dataset):
 
     def __getitem__(self, i):
 
-        j = math.floor(i/10)
-        k = i%10
+        j = math.floor(i/self.sample_window)
+        k = i%self.sample_window
         sample = self.balancedData[j]  # shape(2, 16, 239770) - x/y, channels, values
         # print('Sample shape', sample[0].size())
         y = sample[1] # labels
@@ -427,18 +429,20 @@ class BalancedData1m(Dataset):
 
 class BalancedSpreadData1m(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, stepback=2, transform=None, multiple=1, duplicate_ictal = False, nan_as_noise=False):
+    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal = False, nan_as_noise=False):
         self.pt=pt
         self.train_percent = train_percent
         self.stepback = stepback
         self.transform = transform
         self.train = train
+        self.sample_window = sample_window
+
         if train:
-            f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+            f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
             self.start = f['train_start']
             self.end = f['train_end']
         else:
-            f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%d.mat' % (stepback, train_percent, pt), 'r')
+            f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
             self.start = f['test_start']
             self.end = f['test_end']
         self.horizon = f['pred_horizon']
@@ -454,6 +458,7 @@ class BalancedSpreadData1m(Dataset):
         inter_times = self.get_inter()
         self.shuffle_samples(sz_times, inter_times)
         self.len = sz_times.size + inter_times.size
+        print('Length in Dataset init ', self.len)
         self.nan_as_noise = nan_as_noise
 
     def __len__(self):
@@ -461,19 +466,19 @@ class BalancedSpreadData1m(Dataset):
 
     def get_ictal(self):
         sz_times = self.times[self.labels == 1]
-        sz_times_split = np.zeros(sz_times.size*10)
+        sz_times_split = np.zeros(sz_times.size*self.sample_window)
         for i, time in enumerate(sz_times):
-            for j in range(10):
-                sz_times_split[i*10+j] = sz_times[i] + 60*j
+            for j in range(self.sample_window):
+                sz_times_split[i*self.sample_window+j] = sz_times[i] + 60*j
         return sz_times_split
 
     def get_inter(self):
         num_sz = int(np.sum(self.labels[self.labels == 1]))
         length = self.labels.size
         sz_times = self.times[self.labels == 1]
-        inter_times = np.zeros(num_sz*10)
+        inter_times = np.zeros(num_sz*self.sample_window)
 
-        for i in range(num_sz*10):
+        for i in range(num_sz*self.sample_window):
             found = False
             # select random index and see if its far enough away
             while not found:
@@ -488,7 +493,7 @@ class BalancedSpreadData1m(Dataset):
                         if time_to_szs.min() / 3600 > distance_from_sz:
                             found = True
 
-            inter_times[i] = self.times[k] + np.random.randint(0,9)*60  # choose random minute within the 10minute period
+            inter_times[i] = self.times[k] + np.random.randint(0,self.sample_window-1)*60  # choose random minute within the 10minute period
 
         return inter_times
 
