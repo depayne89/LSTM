@@ -7,7 +7,8 @@ from scipy import signal
 import torchaudio
 import torch
 # import matplotlib.pyplot as plt
-from datetime import datetime
+# from datetime import datetime, date
+import datetime
 
 
 # import visualize as vis
@@ -349,14 +350,17 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
         ts = time.time()
         high = 0
         dropout = np.zeros(sample_times.shape)
+
+        start_rec = get_record_start(6)
+
         for i,stime in enumerate(sample_times):
             # print(i, ' ', stime)
             if (i+1)%100==0:
 
                 t = time.time() - ts
-                now = datetime.now()
+                now = datetime.datetime.now()
                 p_time = sample_times.shape[0] / i * t
-                to_write = str(now) + ' Patient %d %dmins set%d. %d steps of %d. %0.1f out of %0.1f %d above threshold' % (pt, sample_length,1- int(train), i, sample_times.shape[0], t/60., p_time/60., high)
+                to_write = str(now) + ' Patient %d %dmins set%d. %d steps of %d. %0.1f out of %0.1f %d above threshold' % (patient, sample_length,1- int(train), i, sample_times.shape[0], t/60., p_time/60., high)
 
                 print(to_write, file=open('/media/projects/daniel_lstm/tmp/data_build_log.txt', 'w'))
 
@@ -364,7 +368,11 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
                 # stdout.write(to_write)
                 # stdout.flush()
 
-            drop = calc_drop(patient, stime)
+            try:
+                drop = calc_drop(patient, stime)
+            except:
+                drop=1.0
+                print('Error calculating dropout, setting drop to 1')
             dropout[i] = drop
             if drop > drop_threshold:
                 high +=1
@@ -409,10 +417,6 @@ def filter_data(data):
         filtered[i] = signal.sosfilt(sos, channel)
     return filtered
 
-# for pt in [1,6,8,9,10,11,13,15]:
-#     generate_dataset(pt, 80, steps_back=0, train=True)
-#     generate_dataset(pt, 80, steps_back=0, train=False)
-
 
 def spectrogram(data):
     spec_transform = torchaudio.transforms.Spectrogram()
@@ -429,6 +433,7 @@ def spectrogram(data):
     # plt.show()
 
     return out
+
 
 def flattened_spectrogram(data):
     spec_transform = torchaudio.transforms.Spectrogram()
@@ -475,10 +480,15 @@ def fill_with_noise(pt, data):
 
     return data
 
-for pt in [1, 6, 8, 9, 10, 11, 13, 15]:
-    print('----  Patient %d  ---' % pt)
-    for length in [2,10]:
-        generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=2, infer_dropout=False)
-        generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=2, infer_dropout=False)
-# #
+
+# for pt in [6, 8, 9, 10, 11, 13, 15]:
+#     print('----  Patient %d  ---' % pt)
+#     for length in [2,10]:
+#
+#         if pt == 6 and length == 2:
+#             generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=length, infer_dropout=False)
+#         else:
+#             generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=length, infer_dropout=False)
+#             generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=length, infer_dropout=False)
+
 

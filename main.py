@@ -17,21 +17,21 @@ import traintest as tt
 import model_functions as mf
 
 # -------------- Options -------------------
-patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
-# patients = [13, 15]  # patient list (1-15)
+# patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
+patients = [10, 11, 13, 15]  # patient list (1-15)
 
 # patients = [1,6, 8, 9]  # patient list (1-15)
+# patients = [6]  # patient list (1-15)
 
-# patients = [10]  # patient list (1-15)
 
-model_type = '1min'
-# model_type = 'short'
+# model_type = '1min'
+model_type = 'short'
 # model_type = 'medium'
 # model_type = 'long'
 # model_type = 'combo'
 
-train = 0   # binary, whether to train a new model
-test = 1    # binary, whether to test the model
+train = 1   # binary, whether to train a new model
+test = 0    # binary, whether to test the model
 test_on_whole = 0
 use_existing_results = 0  # determines whether existing results should be gathered
 test_iterations = 3  # odd, How many test sets to take median from
@@ -64,12 +64,12 @@ transform = None
 flatten_spec = False
 nan_as_noise = True
 short_look_back_min = 60
-short_look_back = short_look_back_min / sample_window # how many samples prior to labeled sample to start training from (eg 6
+short_look_back = int(short_look_back_min / sample_window) # how many samples prior to labeled sample to start training from (eg 6
 hrs_back = 24
 days_back = 30
 
-n_epochs = 2
-min_batch_size = 160  # for 1mBalanced: 20 samples / sz
+n_epochs = 5
+min_batch_size = 16*sample_window  # for 1mBalanced: 20 samples / sz
 batch_size = 16
 learning_rate = .001
 
@@ -167,13 +167,13 @@ for pt in patients:
         else:
             model = models.CNN1min(out1=min_c1, out2=min_c2, out3=min_fc1)
     elif model_type == 'short':
-        model = models.Short(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, lookBack=short_look_back)
+        model = models.Short(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, lookBack=short_look_back, sample_window=sample_window)
     elif model_type == 'medium':
-        model = models.Medium(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, hrsBack=hrs_back)
+        model = models.Medium(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, hrsBack=hrs_back, sample_window=sample_window)
     elif model_type == 'long':
-        model = models.Long(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, daysBack=days_back)
+        model = models.Long(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, daysBack=days_back, sample_window=sample_window)
     elif model_type == 'combo':
-        model = models.Combo(min_model_path, short_model_path, medium_model_path, long_model_path, transform=transform)
+        model = models.Combo(min_model_path, short_model_path, medium_model_path, long_model_path, transform=transform, sample_window=sample_window)
     else:
         print('Model Type not found')
         sys.exit(0)

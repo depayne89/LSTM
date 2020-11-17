@@ -139,7 +139,10 @@ def test(pt, trained_model, validation_loader):
         power = np.array([])
         predictions = np.array([])
 
+
     for x, y in validation_loader:
+        # print('In loop')
+
         y_tensor = torch.cat((y_tensor, y.type(torch.float)))
         # x, y = x.to(device), y.to(device)
         batch += 1

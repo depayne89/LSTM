@@ -451,7 +451,7 @@ class BalancedSpreadData1m(Dataset):
         # self.dropout = np.asarray(f['sample_dropout'])
         f.close()
 
-        print('TRansform in dataset: ', transform)
+        # print('TRansform in dataset: ', transform)
 
 
         sz_times = self.get_ictal()
