@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import h5py
 import numpy as np
 from sys import stdout
@@ -196,7 +197,7 @@ def get_min(file_base, t_file_start, fs, start=0, end=60):
     #return np.arange(0,160).reshape(16,10)
 
 
-def get_data(pt, t_start, t_end):
+def get_data(pt, t_start, t_end, concat_join=False):
     """Collects and concatenates required data segment from saved .mat files
 
     :param pt: patient index (1 to 15)
@@ -204,6 +205,9 @@ def get_data(pt, t_start, t_end):
     :param t_end: s, seconds since start of recording, end of data to be extracted
     :return: data: numpy matrix (16 x timesteps)
     """
+
+    t0 = time.time()
+    # print('Start get data')
 
     if t_end <= t_start:
         print('Error: end time not after start time')
@@ -223,32 +227,91 @@ def get_data(pt, t_start, t_end):
     # iEEG frequencies, for each patient
     fs = get_fs(pt)
 
+    t1 = time.time() - t0
+
     # Convert times from time since start of recording to time since epoch
     t_start = t_start + get_record_start(pt)
     t_end = t_end + get_record_start(pt)
+
+    t2 = time.time() - t0
 
     # Convert times to UTC date format
     UTC_start = time.gmtime(t_start)
     UTC_end = time.gmtime(t_end)
 
+    t3 = time.time() - t0
+
+
+    t4=0
+    t5=0
+    t6=0
+    t7=0
+    t8=0
+    t9=0
+    t10=0
+
     # if start and end time in the same .mat file
     if time.gmtime(t_start-t_start % 60) == time.gmtime(t_end-t_end % 60):
 
         data = get_min(file_base, t_start-t_start % 60, fs, UTC_start.tm_sec, UTC_end.tm_sec)   # gets data from the file
-
+        t4 = time.time() - t0
     else: # extract from multiple files
         # extract appropriate segment of the first file
-        data = get_min(file_base, t_start - t_start % 60, fs, UTC_start.tm_sec, 60)
-        t_tmp = t_start - t_start % 60 + 60  # moves to next time block
+        if concat_join:
+            data = get_min(file_base, t_start - t_start % 60, fs, UTC_start.tm_sec, 60)
+            t5 = time.time() - t0
 
-        # while not at the start of the last file to look at
-        while t_tmp < (t_end - t_end % 60):
-            # extract full file and join to previous data
-            data = np.concatenate((data, get_min(file_base, t_tmp, fs)), axis=1)
-            t_tmp += 60 # advance to next segment
+            t_tmp = t_start - t_start % 60 + 60  # moves to next time block
 
-        # extract last segment of file to the appropriate point and join to previous data
-        data = np.concatenate((data, get_min(file_base, t_tmp, fs, 0, UTC_end.tm_sec)), axis=1)
+            # while not at the start of the last file to look at
+            i=0
+
+            while t_tmp < (t_end - t_end % 60):
+                i+=1
+                # extract full file and join to previous data
+                t6 = time.time() - t0
+
+                new = get_min(file_base, t_tmp, fs)
+                t7 = time.time() - t0
+
+                data = np.concatenate((data, new), axis=1)
+                t8 = time.time() - t0
+                t_tmp += 60 # advance to next segment
+
+            # extract last segment of file to the appropriate point and join to previous data
+            t9 = time.time() - t0
+
+            data = np.concatenate((data, get_min(file_base, t_tmp, fs, 0, UTC_end.tm_sec)), axis=1)
+            t10 = time.time() - t0
+        else:
+            data_start = get_min(file_base, t_start - t_start % 60, fs, UTC_start.tm_sec, 60)
+            # print('Shape', data_start.shape)
+            t5 = time.time() - t0
+
+            t_tmp = t_start - t_start % 60 + 60  # moves to next time block
+            n = int((t_end - t_end % 60 - t_tmp)/60)
+
+            if n<1:
+                if t_end % 60==0:
+                    return data_start
+                else:
+                    data_end = get_min(file_base, t_end - t_end % 60, fs, 0, UTC_end.tm_sec)
+                    data = np.concatenate((data_start, data_end), axis=1)
+            else:
+                dict_tmp = {}
+                for j in range(n):
+                    min = get_min(file_base, t_tmp + j*60, fs)
+                    dict_tmp[str(j)] = min
+                tuple_tmp = tuple(dict_tmp.values())
+                data_mid = np.concatenate(tuple_tmp, axis=1)
+
+                if t_end % 60 > 0:
+                    data_end = get_min(file_base, t_end - t_end % 60, fs, 0, UTC_end.tm_sec)
+                    data = np.concatenate((data_start, data_mid, data_end), axis=1)
+                else:
+                    data = np.concatenate((data_start, data_mid), axis=1)
+
+    # print('t1: %.2f, t2: %.2f, t3: %.2f, t4: %.2f, t5: %.2f, t6: %.2f, t7: %.2f, t8: %.2f, t9: %.2f,, t10: %.2f' % (t1, t2, t3, t4, t5, t6,t7, t8, t9, t10))
 
     return data
 
@@ -288,7 +351,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
     f.close()
     # create array of timestamps every 10 minutes from start of period to end
     start = start + get_record_start(patient)
-    start_round = start + ((sample_length*60)-start%(sample_length*60))  # round up to nearest 10min mark
+    start_round = start + ((sample_length*60)-start%(sample_length*60))  # round up to nearest x-min mark
     start_time = start_round - get_record_start(patient)
 
     num_samples = int((end-start_time) / (60*sample_length))
@@ -331,8 +394,8 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
     # Calculate dropouts
     sz_labels = labels[labels==1]
     print('Sz Count b4 drop, ', sz_labels.shape)
-    print('Labelling Dropout')
     if infer_dropout:
+        print('Infering dropout')
         if train:
             f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%d.mat' % (steps_back, percent_train, patient), 'r')
         else:
@@ -347,6 +410,7 @@ def generate_dataset(patient, percent_train, steps_back=2, train=True, sample_le
 
 
     else:
+        print('Calculating Dropout')
         ts = time.time()
         high = 0
         dropout = np.zeros(sample_times.shape)
@@ -469,26 +533,74 @@ def flattened_spectrogram(data):
 def fill_with_noise(pt, data):
     # print('In NOISE')
     stats = np.load('/media/projects/daniel_lstm/raw_eeg_stats/%d.npy' % pt)
-
+    dims = len(data.shape)
 
     # ind = np.asarray(np.where(np.isnan(data)))
 
     # #
-    for i in range(data.shape[0]):
-        ind = np.where(np.isnan(data[i]))
-        data[i, ind] = np.random.normal(stats[i,0], stats[i, 1], len(ind))
+    # print(data.shape)
+    # print(dims)
+    if dims==2:
+        for i in range(data.shape[0]):
+            ind = np.where(np.isnan(data[i]))
+            data[i, ind] = np.random.normal(stats[i,0], stats[i, 1], len(ind))
+    elif dims==3:
+        for i in range(data.shape[0]):
+            for j in range(data.shape[1]):
+                ind = np.where(np.isnan(data[i, j]))
+                data[i, j, ind] = np.random.normal(stats[j, 0], stats[j, 1], len(ind))
 
     return data
 
 
-# for pt in [6, 8, 9, 10, 11, 13, 15]:
+def print_time(timestamp):
+    date = datetime.fromtimestamp(timestamp)
+    print(date.strftime("%d/%m/%Y %H:%M:%S"))
+
+
+def check_dataset(pt, sample_length, train=True, percent_train=80, steps_back = 2):
+
+    percent_train = 80
+    patient = 1
+    train = 1
+    sample_length = 10
+    steps_back = 2
+
+    start = get_record_start(patient)
+
+    f = h5py.File('/media/NVdata/SzTimes/{0:0.0f}_{1:0.0f}_{2:0.0f}.mat'.format( \
+        percent_train, (100 - percent_train), patient), 'r')
+
+    if train:
+        SzTimes = np.asarray(f['train']) + start
+        f = h5py.File(
+            '/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (
+            steps_back, percent_train, sample_length, patient),
+            'r')
+    else:
+        SzTimes = np.asarray(f['test']) + start
+        f = h5py.File(
+            '/media/NVdata/SzTimes/all_test_%dstep_%d_%dmin_%d.mat' % (
+            steps_back, percent_train, sample_length, patient),
+            'r')
+
+
+    sample_times = f['sample_times'].value
+    sample_labels = f['sample_labels'].value
+    szsam_times = sample_times[sample_labels == 1] + start
+    f.close()
+
+    both_times = np.concatenate((SzTimes, szsam_times))
+    both_times.sort()
+
+    for szTime in both_times:
+        print_time(szTime)
+
+
+# for pt in [1,6, 8, 9, 10, 11, 13, 15]:
 #     print('----  Patient %d  ---' % pt)
-#     for length in [2,10]:
-#
-#         if pt == 6 and length == 2:
-#             generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=length, infer_dropout=False)
-#         else:
-#             generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=length, infer_dropout=False)
-#             generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=length, infer_dropout=False)
+#     for length in [4, 20, 40]:
+#         generate_dataset(pt, percent_train=80, steps_back=2, train=True, sample_length=length, infer_dropout=False)
+#         generate_dataset(pt, percent_train=80, steps_back=2, train=False, sample_length=length, infer_dropout=False)
 
 

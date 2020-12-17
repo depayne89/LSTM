@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import numpy as np
 import time
 import h5py
@@ -32,6 +33,7 @@ def select_interictal(self, multiple=1):
             if self.labels[k] == 0:
                 time_to_szs = np.abs(sz_times - self.times[k])
                 if i > 0:
+
                     time_to_inter = np.abs(inter_times - self.times[k])
                     if time_to_szs.min() / 3600 > distance_from_sz and time_to_inter.min() / 3600 > distance_from_inter:
                         found = True
@@ -324,13 +326,19 @@ class BalancedData(Dataset):
 
 
     def __getitem__(self, idx):  # DATA doesn't have to be loaded until here!
-
+        # print('Getting batch')
+        t0=time.time()
         y = self.select_labels[idx]
         if y == 2 or y == -1:
             y = 0
+        t1 = time.time() - t0
+
 
         start = self.select_times[idx]
         end = start + 60*self.sample_window
+
+        t2 = time.time() - t0
+
 
         if self.medium:
             # start -= 60*60 # REMOVE
@@ -364,17 +372,33 @@ class BalancedData(Dataset):
         else:
             # start -= 60
             start -= 60 * (self.sample_window) * (self.lookBack - 1)  # Go back 10s of minutes for more training info
+            t3 = time.time()-t0
+
             x_np = cd.get_data(self.pt, start, end)
+            t4 = time.time() -t0
 
         if self.nan_as_noise:
+            t5 = time.time() -t0
+
             x_np = cd.fill_with_noise(self.pt, x_np)
+            t6 = time.time() -t0
+
         else:
+            t5 = time.time() - t0
+
             x_np[np.isnan(x_np)]=0
+            t6 = time.time() - t0
+
         # plt.plot(x_np[0])
         # plt.show()
         x = torch.tensor(x_np, dtype=torch.float32)
+        t7 = time.time() - t0
+
         # print('X size', x.size())
 
+        te = time.time() - t0
+
+        # print('Sample time: %.2f, t1: %.2f, t2: %.2f, t3: %.2f, t4: %.2f, t5: %.2f, t6: %.2f, t7: %.2f' % (te, t1, t2, t3, t4, t5, t6, t7))
 
         return x, torch.tensor(y, dtype=torch.float32)
 
@@ -405,7 +429,7 @@ class BalancedData1m(Dataset):
         return self.len
 
     def __getitem__(self, i):
-
+        print('Start Batch')
         j = math.floor(i/self.sample_window)
         k = i%self.sample_window
         sample = self.balancedData[j]  # shape(2, 16, 239770) - x/y, channels, values
@@ -430,12 +454,14 @@ class BalancedData1m(Dataset):
 class BalancedSpreadData1m(Dataset):
 
     def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal = False, nan_as_noise=False):
+
         self.pt=pt
         self.train_percent = train_percent
         self.stepback = stepback
         self.transform = transform
         self.train = train
         self.sample_window = sample_window
+        self.multiple = multiple
 
         if train:
             f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
@@ -445,6 +471,7 @@ class BalancedSpreadData1m(Dataset):
             f = h5py.File('/media/NVdata/SzTimes/all_test_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
             self.start = f['test_start']
             self.end = f['test_end']
+
         self.horizon = f['pred_horizon']
         self.times = np.asarray(f['sample_times'])
         self.labels = np.asarray(f['sample_labels'])
@@ -455,7 +482,9 @@ class BalancedSpreadData1m(Dataset):
 
 
         sz_times = self.get_ictal()
+
         inter_times = self.get_inter()
+
         self.shuffle_samples(sz_times, inter_times)
         self.len = sz_times.size + inter_times.size
         print('Length in Dataset init ', self.len)
@@ -473,12 +502,18 @@ class BalancedSpreadData1m(Dataset):
         return sz_times_split
 
     def get_inter(self):
+        if self.sample_window*self.multiple > 20 :
+            distance_from_inter = .2
+        else:
+            distance_from_inter = .5
+
+
         num_sz = int(np.sum(self.labels[self.labels == 1]))
         length = self.labels.size
         sz_times = self.times[self.labels == 1]
-        inter_times = np.zeros(num_sz*self.sample_window)
+        inter_times = np.zeros(num_sz*self.sample_window*self.multiple)
 
-        for i in range(num_sz*self.sample_window):
+        for i in range(num_sz*self.sample_window*self.multiple):
             found = False
             # select random index and see if its far enough away
             while not found:
@@ -486,6 +521,7 @@ class BalancedSpreadData1m(Dataset):
                 if self.labels[k] == 0:
                     time_to_szs = np.abs(sz_times - self.times[k])
                     if i > 0:
+
                         time_to_inter = np.abs(inter_times - self.times[k])
                         if time_to_szs.min() / 3600 > distance_from_sz and time_to_inter.min() / 3600 > distance_from_inter:
                             found = True
@@ -493,6 +529,7 @@ class BalancedSpreadData1m(Dataset):
                         if time_to_szs.min() / 3600 > distance_from_sz:
                             found = True
 
+            # print('Found ', i)
             inter_times[i] = self.times[k] + np.random.randint(0,self.sample_window-1)*60  # choose random minute within the 10minute period
 
         return inter_times
@@ -512,8 +549,6 @@ class BalancedSpreadData1m(Dataset):
         y = self.select_labels[i]
         if y == 2 or y == -1:
             y = 0
-
-
 
         start = self.select_times[i]
         end = start + 60

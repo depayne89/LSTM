@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import numpy as np
 import time
 import sys, os
@@ -363,7 +364,7 @@ class Short(torch.nn.Module):
 
 class Medium(torch.nn.Module):
 
-    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, hrsBack=24):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, hrsBack=24, sample_window=10):
         super(Medium, self).__init__()
 
         self.min_model_path = min_model_path
@@ -373,6 +374,7 @@ class Medium(torch.nn.Module):
         self.transform=transform
         self.hrsBack=hrsBack
         self.num_features = 32
+        self.sample_window=sample_window
 
         # remove first fc layer after CNNs
         # min_model.fc1 = Identity()
@@ -451,7 +453,7 @@ class Medium(torch.nn.Module):
 
 class Long(torch.nn.Module):
 
-    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, daysBack=30):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, daysBack=30, sample_window=10):
         super(Long, self).__init__()
 
         self.min_model_path = min_model_path
@@ -461,6 +463,7 @@ class Long(torch.nn.Module):
         self.transform = transform
         self.days_back = daysBack
         self.num_features = 32  # -remove one layer: 16. remove all layers: 64*13*13
+        self.sample_window = sample_window
 
         # remove first fc layer after CNNs
         # min_model.fc1 = Identity()

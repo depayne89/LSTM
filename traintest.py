@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import time
 import sys
 import torch
@@ -36,39 +37,58 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
 
         cost = 0
         batch = 0
+        tb = time.time()
 
         for batch_ind, (x, y) in enumerate(train_loader):
 
+            t1 = time.time()-tb
             # x, y = x.to(device), y.to(device)
             # Train on batch
             # print('First Batch')
             optimizer.zero_grad()  # clear gradient
             z = model(x)  # make prediciton
+            t2 = time.time()-tb
             loss = criterion(z, y)  # calculate loss
+            t3=time.time()-tb
             loss.backward()  # calculate gradients
+            t4=time.time()-tb
             optimizer.step()  # update parameters
+            t5=time.time()-tb
             cost += loss.item()
+            t6=time.time()-tb
+
+            (t7, t8, t9, t10, t11, t12)= (0, 0, 0, 0, 0, 0)
+
 
             # Save aucs and loss
             plot_index = int(batch + batches_per_epoch * epoch)
             metrics_text = ''
             if show_auc:
+                t7 = time.time()-tb
+
                 y_np = y.detach().numpy()
                 z_np = z.detach().numpy()
                 sz_yhat, inter_yhat = met.split_yhat(y_np, z_np)
                 a, _, _= met.auc(sz_yhat, inter_yhat)
                 auc_plot[plot_index] = a
                 metrics_text += 'AUC: %.2g ' % a
+                t8 = time.time()-tb
+
             if show_loss:
+                t9 = time.time()-tb
+
                 loss_plot[plot_index] = loss.item()
                 metrics_text += 'loss: %.3g ' % loss.item()
+                t10 = time.time()-tb
+
             if save_forecasts:
+                t11 = time.time()-tb
+
                 y_np = y.detach().numpy()
                 yhat_np = z.detach().numpy()
                 yhat_tosave[epoch, batch_ind, :y_np.shape[0]] = yhat_np.flatten()
                 y_tosave[epoch, batch_ind, :y_np.shape[0]] = y_np.flatten()
-
-
+                t12 = time.time()-tb
 
             # print
             batch += 1
@@ -76,6 +96,10 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
             percent_done = batch / (batches_per_epoch*n_epochs) + epoch/n_epochs
             print('Epoch %d of %d, Batch %d of %d, %0.1f done, %0.2f of %0.2f seconds. ' % (
                 epoch + 1, n_epochs, batch, batches_per_epoch, percent_done * 100, t, t / percent_done) + metrics_text)
+            # print('t1: %.2f, t2: %.2f, t3: %.2f, t4: %.2f, t5: %.2f, t6: %.2f, t7: %.2f, t8: %.2f, t9: %.2f, t10: %.2f, t11: %.2f, t12: %.2f' % (
+            #     t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12
+            # ))
+            tb = time.time()
             # sys.stdout.write('\rBatch %d of %d, %0.1f done, %0.2f of %0.2f seconds. ' % (
             #     batch, batches_per_epoch, percent_done * 100, t, t / percent_done) + metrics_text)
 
@@ -86,9 +110,9 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
             z_np_ = np.array([])
             y_np_ = np.array([])
             l = None
-            print('Before loss calc')
+            # print('Before loss calc')
             for x_, y_ in test_loader:
-                print('Calculating loss')
+                # print('Calculating loss')
 
                 z_ = model(x_)
 
@@ -101,7 +125,7 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
                 z_np_ = np.append(z_np, z_.detach().numpy().flatten())
                 y_np_ = np.append(y_np, y_.detach().numpy().flatten())
 
-            print('After loss calc')
+            # print('After loss calc')
             vloss_plot[vloss_ind] = l.item()
             vauc_plot[vloss_ind] = a
             vis.loss_and_auc(loss_plot, auc_plot, vloss_plot, vauc_plot, model_name, batches_per_epoch, n_epochs)
@@ -128,7 +152,7 @@ def train(model, train_loader, test_loader, criterion, optimizer, n_epochs, batc
     return model
 
 
-def test(pt, trained_model, validation_loader):
+def test(pt, trained_model, validation_loader, batches_per_epoch):
     correct = 0
     batch = 0
     y_tensor = torch.empty(0, dtype=torch.float)
@@ -139,6 +163,9 @@ def test(pt, trained_model, validation_loader):
         power = np.array([])
         predictions = np.array([])
 
+    # print('Data len ', validation_loader.len)
+
+    t0 = time.time()
 
     for x, y in validation_loader:
         # print('In loop')
@@ -146,7 +173,6 @@ def test(pt, trained_model, validation_loader):
         y_tensor = torch.cat((y_tensor, y.type(torch.float)))
         # x, y = x.to(device), y.to(device)
         batch += 1
-        sys.stdout.write('\rBatch %d' % batch)
 
         yhat = trained_model(x)  # was z
         # print('yhat', yhat.data)
@@ -175,6 +201,12 @@ def test(pt, trained_model, validation_loader):
             for i, sample in enumerate(x_np):
                 batch_power[i] = abs(x_np[i]).mean()
             power = np.concatenate((power, batch_power))
+
+        t = time.time() - t0
+        est_t = t/batch * batches_per_epoch
+
+        sys.stdout.write('\rBatch %d of %d. %.1f of %.1f secs' % (batch, batches_per_epoch, t, est_t))
+
 
     if compare_power: vis.correlation(power, predictions, 'power', 'prediction')
 
