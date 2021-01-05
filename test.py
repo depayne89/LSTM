@@ -1,4 +1,4 @@
-# import torch, torchaudio, torchvision
+import torch, torchaudio
 # import torch.optim as optim
 # from torch.utils.data import Dataset, DataLoader
 # import h5py
@@ -23,26 +23,7 @@ from datetime import datetime
 
 import time
 
-if False or False or True:
-    print('True')
-else:
-    print('False')
-
-
-
-
-
-
-
-""" TIMES
-concatenating -                 537 (27.)
-simple array -                  22.34 (.74)
-reshaped array -                47.39 (1.7)
-reshaped array (new var)        50.20 (1.7)
-concat dict                     46.47 (1.6)
-
-
-
-"""
-
+x = 3
+y = x<3
+print(y)
 

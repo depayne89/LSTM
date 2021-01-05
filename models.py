@@ -104,10 +104,12 @@ class CNN1min_fspec(torch.nn.Module):
 
 
 class CNN1min_spec(torch.nn.Module):
-    def __init__(self, out1=16, out2=32, out3=64, out4 = 32, out5 =16):
+    def __init__(self, out1=16, out2=32, out3=64, out4 = 32, out5 =16, quartered = False):
         super(CNN1min_spec, self).__init__()
 
-        self.cnn1 = torch.nn.Conv2d(in_channels=16, out_channels=out1, kernel_size=3, padding=0) # 118
+        self.quartered = quartered
+
+        self.cnn1 = torch.nn.Conv2d(in_channels=16, out_channels=out1, kernel_size=3, padding=0) # 118  18
         self.maxpool1 = torch.nn.MaxPool2d(kernel_size=2, stride=2) # 59
         self.bn1 = torch.nn.BatchNorm2d(num_features=out1)
 
@@ -124,9 +126,10 @@ class CNN1min_spec(torch.nn.Module):
         #23960
         #
         #1496
+        if quartered:end_size = out2*28*6  #out2*168
+        else: end_size = out3*13*13  #out3*169
 
-
-        self.fc1 = torch.nn.Linear(out3*13*13, out4) # 1496 - kernal 5 and pool 4
+        self.fc1 = torch.nn.Linear(end_size, out4) # 1496 - kernal 5 and pool 4
         self.bn4 = torch.nn.BatchNorm1d(num_features=out4)
         self.fc2 = torch.nn.Linear(out4, out5)
         self.bn5 = torch.nn.BatchNorm1d(num_features=out5)
@@ -150,10 +153,11 @@ class CNN1min_spec(torch.nn.Module):
         x = self.bn2(x)
         # print('after cnn2 x require grad? ', x.requires_grad)
 
-        x = self.cnn3(x)
-        x = torch.relu(x)
-        x = self.maxpool3(x)
-        x = self.bn3(x)
+        if not self.quartered:
+            x = self.cnn3(x)
+            x = torch.relu(x)
+            x = self.maxpool3(x)
+            x = self.bn3(x)
 
         x = x.view(x.size(0), -1)
 
@@ -245,7 +249,7 @@ class CNN1min(torch.nn.Module):
 
 class Short(torch.nn.Module):
 
-    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, lookBack = 1, sample_window=10):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, lookBack = 1, sample_window=10, quarter=0):
         super(Short, self).__init__()
 
         self.min_model_path = min_model_path
@@ -256,6 +260,7 @@ class Short(torch.nn.Module):
         self.lookBack=lookBack
         self.sample_window=sample_window
         self.num_features=32
+        self.quarter = quarter
 
         # remove first fc layer after CNNs
         # min_model.fc1 = Identity()
@@ -320,10 +325,15 @@ class Short(torch.nn.Module):
 
             if self.transform:
                 # print(x.size)
-                x_ = torch.empty((batch_size*sequence_length,input_channels, 120, 120), dtype=torch.float)
+                if self.quarter>0: f_size = 30
+                else: f_size = 120
+                x_ = torch.empty((batch_size*sequence_length,input_channels, f_size, 120), dtype=torch.float)
 
                 for sample in range(batch_size*sequence_length):
-                    x_[sample] = self.transform(x[sample])
+                    tmp = self.transform(x[sample])
+                    if self.quarter>0:
+                        x_[sample] = tmp[:, (self.quarter-1)*30:self.quarter*30, :]
+                    else: x_[sample] = tmp
                 x = x_
             # print('x at after transform', x.detach().numpy().shape)
 
@@ -364,7 +374,7 @@ class Short(torch.nn.Module):
 
 class Medium(torch.nn.Module):
 
-    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, hrsBack=24, sample_window=10):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, hrsBack=24, sample_window=10, quarter = 0):
         super(Medium, self).__init__()
 
         self.min_model_path = min_model_path
@@ -375,6 +385,7 @@ class Medium(torch.nn.Module):
         self.hrsBack=hrsBack
         self.num_features = 32
         self.sample_window=sample_window
+        self.quarter = quarter
 
         # remove first fc layer after CNNs
         # min_model.fc1 = Identity()
@@ -419,10 +430,16 @@ class Medium(torch.nn.Module):
             x = x.reshape((batch_size*sequence_length, input_channels, sample_trim))
 
             if self.transform:
-                x_ = torch.empty((batch_size*sequence_length, input_channels, 120, 120), dtype=torch.float)
+                if self.quarter>0: f_size = 30
+                else: f_size = 120
+                x_ = torch.empty((batch_size*sequence_length, input_channels, f_size, 120), dtype=torch.float)
 
                 for sample in range(batch_size*sequence_length):
-                    x_[sample] = self.transform(x[sample])
+                    tmp = self.transform(x[sample])
+                    if self.quarter > 0:
+                        x_[sample] = tmp[:, (self.quarter - 1) * 30:self.quarter * 30, :]
+                    else:
+                        x_[sample] = tmp
                 x = x_
 
             x = self.min_model(x)
@@ -451,9 +468,10 @@ class Medium(torch.nn.Module):
         else:
             return out
 
+
 class Long(torch.nn.Module):
 
-    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, daysBack=30, sample_window=10):
+    def __init__(self, min_model_path, rn1=16, out1=16, transform=None, daysBack=30, sample_window=10, quarter=0):
         super(Long, self).__init__()
 
         self.min_model_path = min_model_path
@@ -464,6 +482,7 @@ class Long(torch.nn.Module):
         self.days_back = daysBack
         self.num_features = 32  # -remove one layer: 16. remove all layers: 64*13*13
         self.sample_window = sample_window
+        self.quarter=quarter
 
         # remove first fc layer after CNNs
         # min_model.fc1 = Identity()
@@ -508,10 +527,16 @@ class Long(torch.nn.Module):
             x = x.reshape((batch_size*sequence_length, input_channels, sample_trim))
 
             if self.transform:
+                if self.quarter>0: f_size = 30
+                else: f_size = 120
                 x_ = torch.empty((batch_size*sequence_length, input_channels, 120, 120), dtype=torch.float)
 
                 for sample in range(batch_size*sequence_length):
-                    x_[sample] = self.transform(x[sample])
+                    tmp = self.transform(x[sample])
+                    if self.quarter > 0:
+                        x_[sample] = tmp[:, (self.quarter - 1) * 30:self.quarter * 30, :]
+                    else:
+                        x_[sample] = tmp
                 x = x_
 
             x = self.min_model(x)

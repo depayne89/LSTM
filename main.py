@@ -23,10 +23,10 @@ patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
 # patients = [1,6, 8, 9]  # patient list (1-15)
 # patients = [15]  # patient list (1-15)
 
-runs = 16
+runs = 15
 
-# model_type = '1min'
-model_type = 'short'
+model_type = '1min'
+# model_type = 'short'
 # model_type = 'medium'
 # model_type = 'long'
 # model_type = 'combo'
@@ -34,7 +34,7 @@ model_type = 'short'
 train = 1   # binary, whether to train a new model
 test = 1
 test_on_whole = 0
-use_existing_results = 0  # determines whether existing results should be gathered
+use_existing_results = 1  # determines whether existing results should be gathered
 test_iterations = 3  # odd, How many test sets to take median from
 
 show_auc = 1
@@ -52,24 +52,25 @@ show_tiw = 1
 # min_version = 12  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
 
 combo_version = 2
-long_version = 10  # Basic (accidentaly overwritten), last_layer_off = 1
-medium_version = 12  # Basic = 2, last_layer_off = 3
-short_version = 21  # Baisc = 8, last_layer off = 10
-min_version = 13  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
+long_version = 15  # Basic (accidentaly overwritten), last_layer_off = 1
+medium_version = 17  # Basic = 2, last_layer_off = 3
+short_version = 29  # Baisc = 8, last_layer off = 10
+min_version = 22  # Latest: flatspec:11, spec:10, timeseries:10, untrained: 0
 
 sample_window = 10  # original was 10 minutes, options: 2min, 4min, 10min, 20min, 60min
 data_mult = 1  # how many interictal sample per seizure (this is balanced by including duplicate sz samples)
 duplicate_ictal = False
+transform = None  # default
 use_spec = True
-transform = None
 flatten_spec = False
 nan_as_noise = True
 short_look_back_min = 60
 short_look_back = int(short_look_back_min / sample_window) # how many samples prior to labeled sample to start training from (eg 6
 hrs_back = 24
 days_back = 30
+quarter = 1
 
-n_epochs = 5
+n_epochs = 2
 min_batch_size = 16*sample_window  # for 1mBalanced: 20 samples / sz
 batch_size = 16
 learning_rate = .001
@@ -84,38 +85,42 @@ min_fc2 = 16
 
 # variables to iterate over
 if runs>1:
-    model_type_ = ['1min', 'short', 'medium', 'long',
+    model_type_ = ['short', 'medium', 'long',
                    '1min', 'short', 'medium', 'long',
                    '1min', 'short', 'medium', 'long',
                    '1min', 'short', 'medium', 'long']
-    long_version_ = [11, 11, 11, 11,
-                     12, 12, 12, 12,
-                     13, 13, 13, 13,
-                     14, 14, 14, 14]
-    medium_version_ =[13, 13, 13, 13,
-                      14, 14, 14, 14,
-                      15, 15, 15, 15,
-                      16, 16, 16, 16]
-    short_version_ = [25, 25, 25, 25,
-                      26, 26, 26, 26,
-                      27, 27, 27, 27,
-                      28, 28, 28, 28]
-    min_version_ = [18, 18, 18, 18,
-                    19, 19, 19, 19,
-                    20, 20, 20, 20,
-                    21, 21, 21, 21]
-    sample_window_ = [2, 2, 2, 2,
-                      4, 4, 4, 4,
-                      10, 10, 10, 10,
+    long_version_ = [15, 15, 15,
+                     16, 16, 16, 16,
+                     17, 17, 17, 17,
+                     18, 18, 18, 18]
+    medium_version_ =[17, 17, 17,
+                      18, 18, 18, 18,
+                      19, 19, 19, 19,
                       20, 20, 20, 20]
-    data_mult_ = [20, 20, 20, 20,
-                  10, 10, 10, 10,
-                  4,  4,  4,  4,
-                  2,  2,  2,  2]
-    n_epochs_ = [2, 5, 5, 5,
+    short_version_ = [29, 29, 29,
+                      30, 30, 30, 30,
+                      31, 31, 31, 31,
+                      32, 32, 32, 32]
+    min_version_ = [22, 22, 22,
+                    23, 23, 23, 23,
+                    24, 24, 24, 24,
+                    25, 25, 25, 25]
+    sample_window_ = [10, 10, 10, 10,
+                      10, 10, 10, 10,
+                      10, 10, 10, 10,
+                      10, 10, 10, 10]
+    data_mult_ = [1, 1, 1,
+                  1, 1, 1, 1,
+                  1, 1, 1, 1,
+                  1, 1, 1, 1]
+    n_epochs_ = [5, 5, 5,
                 2, 5, 5, 5,
                 2, 5, 5, 5,
                 2, 5, 5, 5]
+    quarter_ = [1, 1, 1,
+               2, 2, 2, 2,
+               3, 3, 3, 3,
+               4, 4, 4, 4,]
 
 
 
@@ -156,14 +161,16 @@ def load_or_calculate_forecasts(pt, t_model, dataset, model_name):
 
 
 for run in range(runs):
-    model_type = model_type_[run]
-    long_version = long_version_[run]
-    medium_version = medium_version_[run]
-    short_version = short_version_[run]
-    min_version = min_version_[run]
-    sample_window = sample_window_[run]
-    data_mult = data_mult_[run]
-    n_epochs = n_epochs_[run]
+    if runs > 1:
+        model_type = model_type_[run]
+        long_version = long_version_[run]
+        medium_version = medium_version_[run]
+        short_version = short_version_[run]
+        min_version = min_version_[run]
+        sample_window = sample_window_[run]
+        data_mult = data_mult_[run]
+        n_epochs = n_epochs_[run]
+        quarter = quarter_[run]
     min_batch_size = 16 * sample_window  # for 1mBalanced: 20 samples / sz
 
     print('\n\n######################## NEW RUN ########################')
@@ -221,7 +228,7 @@ for run in range(runs):
                 if flatten_spec:
                     model = models.CNN1min_fspec(out1=min_c1, out2=min_c2, out3=min_c3, out4=min_fc1, out5=min_fc2)
                 else:
-                    model = models.CNN1min_spec(out1=min_c1, out2=min_c2, out3=min_c3, out4=min_fc1, out5=min_fc2)
+                    model = models.CNN1min_spec(out1=min_c1, out2=min_c2, out3=min_c3, out4=min_fc1, out5=min_fc2, quartered=quarter>0)
             else:
                 model = models.CNN1min(out1=min_c1, out2=min_c2, out3=min_fc1)
 
@@ -249,8 +256,8 @@ for run in range(runs):
             if model_type == '1min':
                 train_model(model,
                             gd.BalancedSpreadData1m(pt=pt, sample_window= sample_window, stepback=2, multiple=data_mult, duplicate_ictal=duplicate_ictal,
-                                                    transform=transform, nan_as_noise=nan_as_noise),
-                            gd.BalancedSpreadData1m(pt=pt, sample_window= sample_window, train=False, stepback=2, transform=transform, nan_as_noise=nan_as_noise),
+                                                    transform=transform, nan_as_noise=nan_as_noise, quarter=quarter),
+                            gd.BalancedSpreadData1m(pt=pt, sample_window= sample_window, train=False, stepback=2, transform=transform, nan_as_noise=nan_as_noise, quarter=quarter),
                             min_model_name, min_model_path, batch_size=min_batch_size)
             elif model_type == 'short':
                 train_model(model,
@@ -324,7 +331,7 @@ for run in range(runs):
 
             for j in range(test_iterations):
                 if model_type == '1min':
-                    test_data = gd.BalancedSpreadData1m(pt=pt, sample_window=sample_window, train=False, transform=transform, nan_as_noise=nan_as_noise)
+                    test_data = gd.BalancedSpreadData1m(pt=pt, sample_window=sample_window, train=False, transform=transform, nan_as_noise=nan_as_noise, quarter=quarter)
                     model_name = min_model_name
                 elif model_type == 'short':
                     test_data = gd.BalancedData(pt=pt, sample_window=sample_window, train=False, transform=transform, lookBack=short_look_back, nan_as_noise=nan_as_noise)

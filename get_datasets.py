@@ -283,7 +283,7 @@ class WholeDatasetLookBack(Dataset):
 
 class BalancedData(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1, medium=False, long=False, nan_as_noise=False, ):
+    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal=False, lookBack=1, medium=False, long=False, nan_as_noise=False):
         self.pt=pt
         self.train_percent = train_percent
         self.sample_window = sample_window
@@ -453,7 +453,7 @@ class BalancedData1m(Dataset):
 
 class BalancedSpreadData1m(Dataset):
 
-    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal = False, nan_as_noise=False):
+    def __init__(self, pt, train=True, train_percent=80, sample_window=10, stepback=2, transform=None, multiple=1, duplicate_ictal = False, nan_as_noise=False, quarter = 0):
 
         self.pt=pt
         self.train_percent = train_percent
@@ -462,6 +462,7 @@ class BalancedSpreadData1m(Dataset):
         self.train = train
         self.sample_window = sample_window
         self.multiple = multiple
+        self.quarter = quarter
 
         if train:
             f = h5py.File('/media/NVdata/SzTimes/all_train_%dstep_%d_%dmin_%d.mat' % (stepback, train_percent, sample_window, pt), 'r')
@@ -568,6 +569,9 @@ class BalancedSpreadData1m(Dataset):
         if self.transform:
             # print(x.size)
             x = self.transform(x)
+            if self.quarter>0:
+                x = x[:, (self.quarter-1)*30:self.quarter*30, :]
+                # print('Cut spec shape', x.shape)
 
         return x, torch.tensor(y, dtype=torch.float32)
 
