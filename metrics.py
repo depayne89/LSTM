@@ -179,7 +179,7 @@ def brier_skill_score(sz_forecasts, inter_forecasts, p_sz):
     bss_array = np.empty(n_iters)
     # print('')
     for i in range(n_iters):
-        print('\r%d' % i, end="")
+        # print('\r%d' % i, end="")
         np.random.shuffle(forecasts)
         sz_forecasts_r = forecasts[:sz_forecasts.size]
         inter_forecasts_r = forecasts[sz_forecasts.size:]

@@ -571,7 +571,7 @@ class BalancedSpreadData1m(Dataset):
             x = self.transform(x)
             if self.quarter>0:
                 x = x[:, (self.quarter-1)*30:self.quarter*30, :]
-                # print('Cut spec shape', x.shape)
+                print('Cut spec shape', x.shape)
 
         return x, torch.tensor(y, dtype=torch.float32)
 

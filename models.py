@@ -139,7 +139,7 @@ class CNN1min_spec(torch.nn.Module):
 
     def forward(self, x):
         # print('In Forward x require grad? ', x.requires_grad)
-        # print('X shape in forward', x.detach().numpy().shape)
+        print('X shape in forward', x.detach().numpy().shape)
         # print('X type', x.detach().type())
         x = self.cnn1(x)
         x = torch.relu(x)
@@ -160,7 +160,7 @@ class CNN1min_spec(torch.nn.Module):
             x = self.bn3(x)
 
         x = x.view(x.size(0), -1)
-
+        print('x size after cnns', x.shape  )
         x = self.fc1(x)
         x = torch.relu(x)
         # print('testtest')
@@ -335,7 +335,7 @@ class Short(torch.nn.Module):
                         x_[sample] = tmp[:, (self.quarter-1)*30:self.quarter*30, :]
                     else: x_[sample] = tmp
                 x = x_
-            # print('x at after transform', x.detach().numpy().shape)
+            print('x at after transform', x.detach().numpy().shape)
 
             x = self.min_model(x) # (batch_size*seq_length, 1)
 
@@ -529,7 +529,7 @@ class Long(torch.nn.Module):
             if self.transform:
                 if self.quarter>0: f_size = 30
                 else: f_size = 120
-                x_ = torch.empty((batch_size*sequence_length, input_channels, 120, 120), dtype=torch.float)
+                x_ = torch.empty((batch_size*sequence_length, input_channels, f_size, 120), dtype=torch.float)
 
                 for sample in range(batch_size*sequence_length):
                     tmp = self.transform(x[sample])

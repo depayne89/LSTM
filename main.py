@@ -23,7 +23,7 @@ patients = [1, 6, 8, 9, 10, 11, 13, 15]  # patient list (1-15)
 # patients = [1,6, 8, 9]  # patient list (1-15)
 # patients = [15]  # patient list (1-15)
 
-runs = 15
+runs = 16
 
 model_type = '1min'
 # model_type = 'short'
@@ -31,7 +31,7 @@ model_type = '1min'
 # model_type = 'long'
 # model_type = 'combo'
 
-train = 1   # binary, whether to train a new model
+train = 0   # binary, whether to train a new model
 test = 1
 test_on_whole = 0
 use_existing_results = 1  # determines whether existing results should be gathered
@@ -85,23 +85,23 @@ min_fc2 = 16
 
 # variables to iterate over
 if runs>1:
-    model_type_ = ['short', 'medium', 'long',
+    model_type_ = ['1min', 'short', 'medium', 'long',
                    '1min', 'short', 'medium', 'long',
                    '1min', 'short', 'medium', 'long',
                    '1min', 'short', 'medium', 'long']
-    long_version_ = [15, 15, 15,
+    long_version_ = [15, 15, 15, 15,
                      16, 16, 16, 16,
                      17, 17, 17, 17,
                      18, 18, 18, 18]
-    medium_version_ =[17, 17, 17,
+    medium_version_ =[17, 17, 17, 17,
                       18, 18, 18, 18,
                       19, 19, 19, 19,
                       20, 20, 20, 20]
-    short_version_ = [29, 29, 29,
+    short_version_ = [29, 29, 29, 29,
                       30, 30, 30, 30,
                       31, 31, 31, 31,
                       32, 32, 32, 32]
-    min_version_ = [22, 22, 22,
+    min_version_ = [22, 22, 22, 22,
                     23, 23, 23, 23,
                     24, 24, 24, 24,
                     25, 25, 25, 25]
@@ -109,15 +109,15 @@ if runs>1:
                       10, 10, 10, 10,
                       10, 10, 10, 10,
                       10, 10, 10, 10]
-    data_mult_ = [1, 1, 1,
+    data_mult_ = [1, 1, 1, 1,
                   1, 1, 1, 1,
                   1, 1, 1, 1,
                   1, 1, 1, 1]
-    n_epochs_ = [5, 5, 5,
+    n_epochs_ = [5, 5, 5, 5,
                 2, 5, 5, 5,
                 2, 5, 5, 5,
                 2, 5, 5, 5]
-    quarter_ = [1, 1, 1,
+    quarter_ = [1, 1, 1, 1,
                2, 2, 2, 2,
                3, 3, 3, 3,
                4, 4, 4, 4,]
@@ -173,10 +173,17 @@ for run in range(runs):
         quarter = quarter_[run]
     min_batch_size = 16 * sample_window  # for 1mBalanced: 20 samples / sz
 
+    if model_type=='1min': version=min_version
+    elif model_type=='short': version = short_version
+    elif model_type=='medium': version = medium_version
+    elif model_type=='long': version = long_version
+    else: version = -1
+
     print('\n\n######################## NEW RUN ########################')
     print('Type:', model_type)
-    print('Window:', sample_window)
-    print('Version:', short_version)
+    print('Version:', version)
+    print('Quarter:', quarter)
+
     if train:
         print('Training')
     if test:
@@ -233,11 +240,11 @@ for run in range(runs):
                 model = models.CNN1min(out1=min_c1, out2=min_c2, out3=min_fc1)
 
         elif model_type == 'short':
-            model = models.Short(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, lookBack=short_look_back, sample_window=sample_window)
+            model = models.Short(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, lookBack=short_look_back, sample_window=sample_window, quarter=quarter)
         elif model_type == 'medium':
-            model = models.Medium(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, hrsBack=hrs_back, sample_window=sample_window)
+            model = models.Medium(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, hrsBack=hrs_back, sample_window=sample_window, quarter=quarter)
         elif model_type == 'long':
-            model = models.Long(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, daysBack=days_back, sample_window=sample_window)
+            model = models.Long(min_model_path=min_model_path, rn1=16, out1=16, transform=transform, daysBack=days_back, sample_window=sample_window, quarter=quarter)
         elif model_type == 'combo':
             model = models.Combo(min_model_path, short_model_path, medium_model_path, long_model_path, transform=transform, sample_window=sample_window)
         else:
